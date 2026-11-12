@@ -48,6 +48,9 @@ export const paymentSchedule = sqliteTable("payment_schedule", {
   amount: integer("amount").notNull(),
   dayOfMonth: integer("day_of_month").notNull(), // 1..30
   categoryId: integer("category_id").references(() => categories.id),
+  priority: text("priority", { enum: ["critica", "alta", "media", "baja"] }).notNull().default("media"),
+  // Ingreso con el que se planea pagar, p. ej. "Sueldo Empresa 1 (Día 30)"
+  fundingSource: text("funding_source"),
   active: integer("active", { mode: "boolean" }).notNull().default(true),
 });
 

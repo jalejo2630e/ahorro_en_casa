@@ -52,6 +52,8 @@ export function getPayments(month: string, today: string) {
       name: paymentSchedule.name,
       amount: paymentSchedule.amount,
       dayOfMonth: paymentSchedule.dayOfMonth,
+      priority: paymentSchedule.priority,
+      fundingSource: paymentSchedule.fundingSource,
       category: categories.name,
       paidAt: paymentStatus.paidAt,
     })

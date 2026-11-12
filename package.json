@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "db:push": "drizzle-kit push",
-    "db:seed": "tsx src/db/seed.ts"
+    "db:seed": "tsx src/db/seed.ts",
+    "db:import": "tsx src/db/import.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.2",

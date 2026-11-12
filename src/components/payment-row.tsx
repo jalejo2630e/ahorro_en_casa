@@ -23,7 +23,9 @@ export function PaymentRow({ p, month }: { p: Payment; month: string }) {
         <p className="truncate font-medium">{p.name}</p>
         <p className="text-xs text-slate-500">
           {p.category ?? "Sin categoría"} · {when(p)}
+          {p.priority === "critica" && <span className="font-semibold text-red-600"> · crítica</span>}
         </p>
+        {p.fundingSource && <p className="truncate text-xs text-slate-400">Se paga con: {p.fundingSource}</p>}
       </div>
       <div className="flex flex-col items-end gap-1.5">
         <p className="font-semibold tabular-nums">{cop(p.amount)}</p>
