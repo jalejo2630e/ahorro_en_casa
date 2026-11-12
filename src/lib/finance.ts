@@ -149,7 +149,7 @@ export function addIncome(
     const saved = Math.round((input.amount * pct) / 100);
     const spendable = input.amount - saved;
     const t = tx.insert(transactions).values({
-      type: "ingreso", concept: input.concept, amount: input.amount,
+      type: "ingreso", concept: input.concept, amount: input.amount, saved,
       pocketId: pocketId("Gastos del mes"), date: input.date, source,
     }).returning().get();
     adjustPocket(pocketId("Gastos del mes"), spendable);
@@ -188,19 +188,53 @@ export function getExpensesByCategory(month: string) {
     .groupBy(categories.id).all();
 }
 
+function savedIn(prefix: string): number {
+  return (
+    db.select({ t: sql<number>`coalesce(sum(${transactions.saved}),0)` })
+      .from(transactions).where(like(transactions.date, `${prefix}-%`)).get()?.t ?? 0
+  );
+}
+
+/** Meta de ahorro: `saved` es lo apartado en el mes; `yearSaved` lo apartado en el año. */
 export function getSavingsGoal(month: string) {
   const year = Number(month.slice(0, 4));
   const goal = db.select().from(savingsGoals).where(eq(savingsGoals.year, year)).get();
-  const pocket = db.select().from(pockets).where(eq(pockets.name, "Ahorro intocable")).get();
-  const saved = pocket?.balance ?? 0;
+  const saved = savedIn(month);
+  const yearSaved = savedIn(String(year));
   const monthly = goal?.monthlyTarget ?? 0;
   const yearly = goal?.yearlyTarget ?? 0;
   return {
-    saved, monthlyTarget: monthly, yearlyTarget: yearly,
+    saved, yearSaved, monthlyTarget: monthly, yearlyTarget: yearly,
     monthlyProgress: monthly ? Math.min(saved / monthly, 1) : 0,
-    yearlyProgress: yearly ? Math.min(saved / yearly, 1) : 0,
+    yearlyProgress: yearly ? Math.min(yearSaved / yearly, 1) : 0,
     medal: medalFor(saved, monthly),
   };
+}
+
+/** Acepta "YYYY-MM"; cualquier otra cosa cae en el mes de hoy. */
+export function parseMonth(raw: string | string[] | undefined, today: string): string {
+  const v = Array.isArray(raw) ? raw[0] : raw;
+  return v && /^\d{4}-(0[1-9]|1[0-2])$/.test(v) ? v : monthOf(today);
+}
+
+/** Resumen de los 12 meses de un año. */
+export function getYearOverview(year: number, today: string) {
+  return Array.from({ length: 12 }, (_, i) => {
+    const month = `${year}-${String(i + 1).padStart(2, "0")}`;
+    const payments = getPayments(month, today);
+    const sum = (f: (p: (typeof payments)[number]) => boolean) =>
+      payments.filter(f).reduce((a, p) => a + p.amount, 0);
+    const s = getSummary(month, today);
+    const g = getSavingsGoal(month);
+    return {
+      month,
+      obligations: sum(() => true),
+      paid: sum((p) => p.status === "pagado"),
+      urgentCount: payments.filter((p) => p.status === "urgente").length,
+      income: s.income, expenses: s.expenses,
+      saved: g.saved, target: g.monthlyTarget, medal: g.medal,
+    };
+  });
 }
 
 export function listCategories() {

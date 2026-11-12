@@ -16,6 +16,8 @@ export const transactions = sqliteTable("transactions", {
   type: text("type", { enum: ["ingreso", "gasto"] }).notNull(),
   concept: text("concept").notNull(),
   amount: integer("amount").notNull(),
+  // Parte del ingreso que se apartó al ahorro (solo ingresos); permite medir la meta por mes
+  saved: integer("saved").notNull().default(0),
   categoryId: integer("category_id").references(() => categories.id),
   pocketId: integer("pocket_id").references(() => pockets.id),
   date: text("date").notNull(), // YYYY-MM-DD

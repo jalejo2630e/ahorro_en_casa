@@ -1,32 +1,38 @@
 import Link from "next/link";
-import { Suspense } from "react";
 import { connection } from "next/server";
+import { Suspense } from "react";
+import { MonthTabs } from "@/components/month-tabs";
 import { PaymentRow } from "@/components/payment-row";
 import { cop, MEDAL_LABEL, monthLabel, pct } from "@/lib/format";
 import {
-  getExpensesByCategory, getSavingsGoal, getSummary, monthOf, toISO, upcomingPayments,
+  getExpensesByCategory, getPayments, getSavingsGoal, getSummary, monthOf, parseMonth, toISO,
+  upcomingPayments,
 } from "@/lib/finance";
 
 const card = "rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900";
 
-export default function Home() {
+export default function Home({ searchParams }: PageProps<"/">) {
   return (
     <div className="space-y-6">
       <Suspense fallback={<p className="text-slate-500">Cargando tu resumen…</p>}>
-        <Dashboard />
+        <Dashboard searchParams={searchParams} />
       </Suspense>
     </div>
   );
 }
 
-async function Dashboard() {
+async function Dashboard({ searchParams }: { searchParams: PageProps<"/">["searchParams"] }) {
+  const sp = await searchParams;
   await connection(); // datos del día: se calculan en cada visita
   const today = toISO(new Date());
-  const month = monthOf(today);
+  const month = parseMonth(sp.mes, today);
+  const isCurrent = month === monthOf(today);
   const s = getSummary(month, today);
   const goal = getSavingsGoal(month);
   const cats = getExpensesByCategory(month);
-  const next = upcomingPayments(7, today);
+  const next = isCurrent
+    ? upcomingPayments(7, today)
+    : getPayments(month, today).filter((p) => p.status !== "pagado").slice(0, 8);
 
   const stats = [
     { label: "Ingresos", value: cop(s.income) },
@@ -41,6 +47,8 @@ async function Dashboard() {
         <h1 className="text-2xl font-bold">Resumen de {monthLabel(month)}</h1>
         <p className="text-sm text-slate-500">Hoy es {today}</p>
       </header>
+
+      <MonthTabs path="/" month={month} todayMonth={monthOf(today)} />
 
       <section aria-label="Resumen" className="grid grid-cols-2 gap-3 md:grid-cols-4">
         {stats.map((x) => (
@@ -58,7 +66,7 @@ async function Dashboard() {
           <span className="text-sm font-medium">{MEDAL_LABEL[goal.medal]}</span>
         </div>
         <Bar label="Meta mensual" value={goal.saved} target={goal.monthlyTarget} progress={goal.monthlyProgress} />
-        <Bar label="Meta anual" value={goal.saved} target={goal.yearlyTarget} progress={goal.yearlyProgress} />
+        <Bar label="Meta anual" value={goal.yearSaved} target={goal.yearlyTarget} progress={goal.yearlyProgress} />
       </section>
 
       <div className="grid gap-6 md:grid-cols-2">
@@ -69,11 +77,11 @@ async function Dashboard() {
 
         <section className={card} aria-label="Próximos pagos">
           <div className="flex items-center justify-between">
-            <h2 className="font-semibold">Próximos 7 días</h2>
-            <Link href="/calendario" className="text-sm font-medium text-emerald-600">Ver calendario</Link>
+            <h2 className="font-semibold">{isCurrent ? "Próximos 7 días" : "Pendientes del mes"}</h2>
+            <Link href={`/calendario?mes=${month}`} className="text-sm font-medium text-emerald-600">Ver calendario</Link>
           </div>
           {next.length === 0 ? (
-            <p className="py-6 text-center text-sm text-slate-500">Nada pendiente esta semana 🎉</p>
+            <p className="py-6 text-center text-sm text-slate-500">{isCurrent ? "Nada pendiente esta semana 🎉" : "Nada pendiente este mes 🎉"}</p>
           ) : (
             <ul className="divide-y divide-slate-100 dark:divide-slate-800">
               {next.map((p) => <PaymentRow key={p.id} p={p} month={month} />)}

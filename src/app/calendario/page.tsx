@@ -1,9 +1,11 @@
 import Link from "next/link";
+import { connection } from "next/server";
 import { Suspense } from "react";
 import { PaymentRow } from "@/components/payment-row";
 import { DOT } from "@/components/status-badge";
 import { cop, monthLabel, shiftMonth } from "@/lib/format";
-import { daysInMonth, getPayments, monthOf, toISO } from "@/lib/finance";
+import { MonthTabs } from "@/components/month-tabs";
+import { daysInMonth, getPayments, monthOf, parseMonth, toISO } from "@/lib/finance";
 
 export const metadata = { title: "Calendario de pagos · Ahorro en casa" };
 
@@ -17,9 +19,9 @@ export default function CalendarPage({ searchParams }: PageProps<"/calendario">)
 
 async function Calendar({ searchParams }: { searchParams: PageProps<"/calendario">["searchParams"] }) {
   const sp = await searchParams;
+  await connection();
   const today = toISO(new Date());
-  const raw = Array.isArray(sp.mes) ? sp.mes[0] : sp.mes;
-  const month = raw && /^\d{4}-(0[1-9]|1[0-2])$/.test(raw) ? raw : monthOf(today);
+  const month = parseMonth(sp.mes, today);
 
   const payments = getPayments(month, today);
   const totals = {
@@ -47,6 +49,8 @@ async function Calendar({ searchParams }: { searchParams: PageProps<"/calendario
           <Link href={`/calendario?mes=${shiftMonth(month, 1)}`} aria-label="Mes siguiente" className="rounded-lg border border-slate-300 px-3 py-1.5 dark:border-slate-700">→</Link>
         </div>
       </header>
+
+      <MonthTabs path="/calendario" month={month} todayMonth={monthOf(today)} />
 
       <section aria-label="Vista mensual" className="rounded-2xl border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
         <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-medium text-slate-500">

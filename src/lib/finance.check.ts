@@ -32,6 +32,16 @@ const s = f.getSummary("2026-11", today);
 assert.equal(s.income, 3_500_000);
 assert.equal(s.expenses, 1_200_000); // un solo arriendo
 assert.equal(f.getSavingsGoal("2026-11").medal, "oro");
+// El ahorro se mide por mes: otro mes del mismo año no hereda lo apartado en noviembre
+assert.equal(f.getSavingsGoal("2026-10").saved, 0);
+assert.equal(f.getSavingsGoal("2026-10").yearSaved, 1_050_000);
+assert.equal(f.getSavingsGoal("2027-11").yearSaved, 0);
+const year = f.getYearOverview(2026, today);
+assert.equal(year.length, 12);
+assert.equal(year[10].saved, 1_050_000);
+assert.equal(year[2].saved, 0);
+assert.equal(f.parseMonth("2026-13", today), "2026-11");
+assert.equal(f.parseMonth(["2027-02"], today), "2027-02");
 console.log("finance OK", s);
 }
 main();
