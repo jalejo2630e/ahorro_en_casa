@@ -200,3 +200,7 @@ export function getSavingsGoal(month: string) {
     medal: medalFor(saved, monthly),
   };
 }
+
+export function listCategories() {
+  return db.select().from(categories).all();
+}

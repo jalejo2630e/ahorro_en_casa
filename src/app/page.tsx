@@ -1,69 +1,137 @@
-import Image from "next/image";
+import Link from "next/link";
+import { Suspense } from "react";
+import { connection } from "next/server";
+import { PaymentRow } from "@/components/payment-row";
+import { cop, MEDAL_LABEL, monthLabel, pct } from "@/lib/format";
+import {
+  getExpensesByCategory, getSavingsGoal, getSummary, monthOf, toISO, upcomingPayments,
+} from "@/lib/finance";
+
+const card = "rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900";
 
 export default function Home() {
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div className="space-y-6">
+      <Suspense fallback={<p className="text-slate-500">Cargando tu resumen…</p>}>
+        <Dashboard />
+      </Suspense>
+    </div>
+  );
+}
+
+async function Dashboard() {
+  await connection(); // datos del día: se calculan en cada visita
+  const today = toISO(new Date());
+  const month = monthOf(today);
+  const s = getSummary(month, today);
+  const goal = getSavingsGoal(month);
+  const cats = getExpensesByCategory(month);
+  const next = upcomingPayments(7, today);
+
+  const stats = [
+    { label: "Ingresos", value: cop(s.income) },
+    { label: "Gastos", value: cop(s.expenses) },
+    { label: "Tasa de ahorro", value: pct(s.savingsRate) },
+    { label: "Margen disponible", value: cop(s.margin), hint: "descontando lo pendiente", negative: s.margin < 0 },
+  ];
+
+  return (
+    <>
+      <header>
+        <h1 className="text-2xl font-bold">Resumen de {monthLabel(month)}</h1>
+        <p className="text-sm text-slate-500">Hoy es {today}</p>
+      </header>
+
+      <section aria-label="Resumen" className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        {stats.map((x) => (
+          <div key={x.label} className={card}>
+            <p className="text-xs font-medium text-slate-500">{x.label}</p>
+            <p className={`mt-1 text-lg font-bold tabular-nums md:text-xl ${x.negative ? "text-red-600" : ""}`}>{x.value}</p>
+            {x.hint && <p className="text-[11px] text-slate-500">{x.hint}</p>}
+          </div>
+        ))}
+      </section>
+
+      <section className={card} aria-label="Reto de ahorro">
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="font-semibold">Reto de ahorro</h2>
+          <span className="text-sm font-medium">{MEDAL_LABEL[goal.medal]}</span>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+        <Bar label="Meta mensual" value={goal.saved} target={goal.monthlyTarget} progress={goal.monthlyProgress} />
+        <Bar label="Meta anual" value={goal.saved} target={goal.yearlyTarget} progress={goal.yearlyProgress} />
+      </section>
+
+      <div className="grid gap-6 md:grid-cols-2">
+        <section className={card} aria-label="Gastos por categoría">
+          <h2 className="mb-3 font-semibold">Gastos por categoría</h2>
+          <Donut data={cats} />
+        </section>
+
+        <section className={card} aria-label="Próximos pagos">
+          <div className="flex items-center justify-between">
+            <h2 className="font-semibold">Próximos 7 días</h2>
+            <Link href="/calendario" className="text-sm font-medium text-emerald-600">Ver calendario</Link>
+          </div>
+          {next.length === 0 ? (
+            <p className="py-6 text-center text-sm text-slate-500">Nada pendiente esta semana 🎉</p>
+          ) : (
+            <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+              {next.map((p) => <PaymentRow key={p.id} p={p} month={month} />)}
+            </ul>
+          )}
+        </section>
+      </div>
+    </>
+  );
+}
+
+function Bar({ label, value, target, progress }: { label: string; value: number; target: number; progress: number }) {
+  return (
+    <div className="mt-4">
+      <div className="mb-1 flex justify-between text-sm">
+        <span>{label}</span>
+        <span className="tabular-nums text-slate-500">{cop(value)} / {cop(target)}</span>
+      </div>
+      <div
+        role="progressbar"
+        aria-label={label}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(progress * 100)}
+        className="h-3 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800"
+      >
+        <div className="h-full rounded-full bg-emerald-500" style={{ width: `${progress * 100}%` }} />
+      </div>
+    </div>
+  );
+}
+
+function Donut({ data }: { data: { category: string; color: string; total: number }[] }) {
+  const total = data.reduce((a, d) => a + d.total, 0);
+  if (total === 0) {
+    return <p className="py-6 text-center text-sm text-slate-500">Aún no hay gastos este mes.</p>;
+  }
+  const stops = data.map((d, i) => {
+    const before = data.slice(0, i).reduce((a, x) => a + x.total, 0);
+    return `${d.color} ${(before / total) * 100}% ${((before + d.total) / total) * 100}%`;
+  });
+  return (
+    <div className="flex flex-col items-center gap-4 sm:flex-row">
+      <div
+        role="img"
+        aria-label={`Distribución de gastos: ${data.map((d) => `${d.category} ${pct(d.total / total)}`).join(", ")}`}
+        className="size-32 shrink-0 rounded-full"
+        style={{ background: `conic-gradient(${stops.join(", ")})`, mask: "radial-gradient(circle, transparent 52%, #000 53%)" }}
+      />
+      <ul className="w-full space-y-1.5 text-sm">
+        {data.map((d) => (
+          <li key={d.category} className="flex items-center gap-2">
+            <span aria-hidden className="size-3 rounded-sm" style={{ background: d.color }} />
+            <span className="flex-1">{d.category}</span>
+            <span className="tabular-nums text-slate-500">{cop(d.total)} · {pct(d.total / total)}</span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
