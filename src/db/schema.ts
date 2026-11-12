@@ -101,3 +101,11 @@ export const incomeReceipts = sqliteTable(
   },
   (t) => [uniqueIndex("income_receipts_unique").on(t.scheduleId, t.occurrence)],
 );
+
+// Configuración clave/valor. Hoy: "start_month" (YYYY-MM), el primer mes que llevas en la app.
+// OJO: src/db/index.ts crea esta tabla con CREATE TABLE IF NOT EXISTS; si cambias esta definición,
+// cambia también ese SQL (deben coincidir exactamente o drizzle-kit querrá reconstruir la tabla).
+export const settings = sqliteTable("settings", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
+});

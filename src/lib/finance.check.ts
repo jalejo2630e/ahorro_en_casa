@@ -55,8 +55,8 @@ assert.deepEqual(incomeOccurrences({ frequency: "mensual" }, "2026-11"), [{ key:
 assert.deepEqual(keys({ frequency: "mensual", dayOfMonth: 31 }, "2026-02"), ["2026-02-28"]);
 
 // ---- Ingresos esperados: 1.5M (día 20) + 3.5M (día 30) + 200k x 5 domingos
-assert.equal(f.expectedIncome("2026-11"), 6_000_000);
-assert.equal(f.expectedIncome("2026-12"), 5_800_000); // diciembre 2026 tiene 4 domingos
+assert.equal(f.expectedIncome("2026-11", today), 6_000_000);
+assert.equal(f.expectedIncome("2026-12", today), 5_800_000); // diciembre 2026 tiene 4 domingos
 
 // ---- Marcar un ingreso esperado como recibido
 const dec = f.getIncomePlan("2026-12", today);
@@ -73,9 +73,9 @@ assert.throws(() => f.markIncomeReceived(pago.scheduleId, "2026-12-15", "2026-12
 
 // ---- Plan de ingreso nuevo con frecuencia diaria
 const plan = f.addIncomePlan({ name: "Propinas", amount: 10_000, frequency: "diario" });
-assert.equal(f.expectedIncome("2026-12"), 5_800_000 + 31 * 10_000);
+assert.equal(f.expectedIncome("2026-12", today), 5_800_000 + 31 * 10_000);
 f.deactivateIncomePlan(plan.id);
-assert.equal(f.expectedIncome("2026-12"), 5_800_000);
+assert.equal(f.expectedIncome("2026-12", today), 5_800_000);
 
 // ---- Presupuesto de gastos diarios = ingresos - pagos obligatorios - meta de ahorro
 // diciembre: 5.8M esperado (recibido 3.5M < esperado) - 1.815M pagos - 1M ahorro
@@ -215,6 +215,36 @@ assert.equal(f.unmarkPaid(addi.id, "2026-12"), true);
 const sum2 = f.getSummary("2026-12", today);
 assert.equal(sum2.obligationsTotal, sum0.obligationsTotal);
 assert.equal(sum2.expenses, sum0.expenses);
+
+// ---- Fecha de inicio: los meses anteriores no tienen pagos ni ingresos esperados (nada "vencido")
+assert.equal(f.getStartMonth(today), "2026-11"); // sin configurar: el mes del primer movimiento
+assert.equal(f.getPayments("2026-10", today).length, 0); // octubre es anterior: no hay pagos vencidos
+assert.equal(f.getPayments("2026-11", today).length, 7);
+assert.equal(f.expectedIncome("2026-10", today), 0);
+assert.deepEqual(f.getIncomePlan("2026-10", today), []);
+const octBudget = f.getBudget("2026-10", today);
+assert.equal(octBudget.beforeStart, true);
+assert.equal(octBudget.budget, 0); // no sale un presupuesto negativo
+assert.equal(f.getSummary("2026-10", today).pendingObligations, 0);
+const yr = f.getYearOverview(2026, today);
+assert.equal(yr[9].beforeStart, true); // octubre
+assert.equal(yr[9].obligations, 0);
+assert.equal(yr[10].beforeStart, false); // noviembre
+assert.equal(yr[0].urgentCount, 0); // enero ya no llena de rojo
+
+// Cambiar la fecha de inicio
+assert.throws(() => f.setStartMonth("2026-13"));
+assert.throws(() => f.setStartMonth("basura"));
+f.setStartMonth("2026-12");
+assert.equal(f.getStartMonth(today), "2026-12");
+assert.equal(f.getPayments("2026-11", today).length, 0); // ahora noviembre queda antes del inicio
+assert.equal(f.getPayments("2026-12", today).length, 7);
+assert.equal(f.getBudget("2026-11", today).beforeStart, true);
+f.setStartMonth("2026-01"); // se puede adelantar el inicio: aparecen los meses anteriores
+assert.equal(f.getPayments("2026-03", today).length, 7);
+assert.equal(f.getBudget("2026-03", today).beforeStart, false);
+f.setStartMonth("2026-11");
+assert.equal(f.getPayments("2026-03", today).length, 0);
 console.log("finance OK", s);
 }
 main();

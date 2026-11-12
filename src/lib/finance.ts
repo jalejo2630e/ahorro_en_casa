@@ -2,7 +2,7 @@ import { and, eq, isNull, like, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   categories, incomeReceipts, incomeSchedule, paymentSchedule, paymentStatus, pockets, savingsGoals,
-  transactions,
+  settings, transactions,
 } from "@/db/schema";
 import { daysBetween, daysInMonth, dueDate, monthOf } from "./dates";
 import { incomeOccurrences, type IncomeRule } from "./income";
@@ -31,6 +31,30 @@ export function medalFor(saved: number, target: number): Medal {
   return "ninguna";
 }
 
+// ---------- Fecha de inicio ----------
+const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
+
+/**
+ * Primer mes que llevas en la app. Los meses anteriores no tienen pagos ni ingresos esperados
+ * (así no aparecen como vencidos). Sin configurar: el mes del primer movimiento, o el mes de hoy.
+ */
+export function getStartMonth(today: string): string {
+  const set = db.select().from(settings).where(eq(settings.key, "start_month")).get();
+  if (set && MONTH_RE.test(set.value)) return set.value;
+  const first = db.select({ m: sql<string | null>`min(substr(${transactions.date}, 1, 7))` }).from(transactions).get()?.m;
+  return first ?? monthOf(today);
+}
+
+export function setStartMonth(month: string) {
+  if (!MONTH_RE.test(month)) throw new Error("Mes inválido (usa AAAA-MM)");
+  db.insert(settings).values({ key: "start_month", value: month })
+    .onConflictDoUpdate({ target: settings.key, set: { value: month } }).run();
+}
+
+export function isBeforeStart(month: string, today: string): boolean {
+  return month < getStartMonth(today);
+}
+
 // ---------- Calendario de pagos ----------
 export function getPayments(month: string, today: string) {
   const rows = db
@@ -55,7 +79,7 @@ export function getPayments(month: string, today: string) {
     .where(eq(paymentSchedule.active, true))
     .all();
 
-  return rows
+  const result = rows
     .map((r) => {
       const due = dueDate(month, r.dayOfMonth);
       return {
@@ -68,6 +92,8 @@ export function getPayments(month: string, today: string) {
       };
     })
     .sort((a, b) => a.due.localeCompare(b.due) || a.name.localeCompare(b.name));
+  // Antes de la fecha de inicio no se llevan pagos (así no aparecen como vencidos)
+  return isBeforeStart(month, today) ? result.slice(0, 0) : result;
 }
 
 export function upcomingPayments(days: number, today: string) {
@@ -233,12 +259,13 @@ export function deactivateIncomePlan(id: number) {
 }
 
 /** Total esperado del mes: monto por pago × cantidad de pagos que caen en ese mes. */
-export function expectedIncome(month: string): number {
+export function expectedIncome(month: string, today: string): number {
+  if (isBeforeStart(month, today)) return 0; // antes de la fecha de inicio no se espera nada
   return listIncomePlans().reduce((a, p) => a + p.amount * incomeOccurrences(p.rule, month).length, 0);
 }
 
 export function getIncomePlan(month: string, today: string) {
-  const plans = listIncomePlans();
+  const plans = isBeforeStart(month, today) ? [] : listIncomePlans();
   const got = new Set(
     db.select().from(incomeReceipts).where(like(incomeReceipts.occurrence, `${month}-%`)).all()
       .map((r) => `${r.scheduleId}|${r.occurrence}`),
@@ -442,7 +469,8 @@ export function getDailyLedger(month: string, today: string): LedgerDay[] {
 export function getBudget(month: string, today: string) {
   const s = getSummary(month, today);
   const goal = getSavingsGoal(month);
-  const budget = s.incomeBase - s.obligationsTotal - goal.monthlyTarget;
+  const beforeStart = isBeforeStart(month, today);
+  const budget = beforeStart ? 0 : s.incomeBase - s.obligationsTotal - goal.monthlyTarget;
   const ledger = buildLedger(month, today, budget);
   const last = ledger.at(-1);
 
@@ -455,7 +483,7 @@ export function getBudget(month: string, today: string) {
   const pool = budget + extra; // todo lo que puedes gastar en el mes sin tocar el ahorro
 
   return {
-    month, budget, extra, pool, spent,
+    month, beforeStart, budget, extra, pool, spent,
     remaining: pool - spent,
     usedPct: pool > 0 ? spent / pool : spent > 0 ? 1 : 0,
     elapsedPct: elapsed / dim,
@@ -493,7 +521,7 @@ export function getSummary(month: string, today: string) {
   const obligationsTotal = payments.reduce((a, p) => a + p.effectiveAmount, 0); // pagado real + pendiente programado
 
   // Si hay ingresos programados se usa lo esperado; si lo recibido es mayor, manda lo recibido.
-  const expected = expectedIncome(month);
+  const expected = expectedIncome(month, today);
   const incomeBase = Math.max(income, expected);
   const margin = incomeBase + extraReceived - expenses - pendingObligations; // lo realmente libre
 
@@ -550,6 +578,7 @@ export function parseMonth(raw: string | string[] | undefined, today: string): s
 
 /** Resumen de los 12 meses de un año. */
 export function getYearOverview(year: number, today: string) {
+  const start = getStartMonth(today);
   return Array.from({ length: 12 }, (_, i) => {
     const month = `${year}-${String(i + 1).padStart(2, "0")}`;
     const payments = getPayments(month, today);
@@ -559,6 +588,7 @@ export function getYearOverview(year: number, today: string) {
     const g = getSavingsGoal(month);
     return {
       month,
+      beforeStart: month < start,
       obligations: sum(() => true),
       paid: sum((p) => p.status === "pagado"),
       urgentCount: payments.filter((p) => p.status === "urgente").length,

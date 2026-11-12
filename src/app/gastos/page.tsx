@@ -1,12 +1,13 @@
 import { connection } from "next/server";
 import { Suspense } from "react";
 import { deleteExpenseAction } from "@/app/actions";
+import { BeforeStartNotice } from "@/components/before-start";
 import { ExpenseForm, ExtraForm } from "@/components/forms";
 import { MonthTabs } from "@/components/month-tabs";
 import { cop, monthLabel, pct } from "@/lib/format";
 import { weekdayOf } from "@/lib/dates";
 import {
-  getBudget, getDailyEntries, getDailyLedger, listCategories, monthOf, parseMonth, toISO,
+  getBudget, getDailyEntries, getDailyLedger, getStartMonth, listCategories, monthOf, parseMonth, toISO,
   type DailyEntry, type LedgerDay,
 } from "@/lib/finance";
 import { WEEKDAY_NAMES } from "@/lib/income";
@@ -37,6 +38,16 @@ async function Expenses({ searchParams }: { searchParams: PageProps<"/gastos">["
   await connection();
   const today = toISO(new Date());
   const month = parseMonth(sp.mes, today);
+  const start = getStartMonth(today);
+  if (month < start) {
+    return (
+      <div className="space-y-6">
+        <header><h1 className="text-2xl font-bold">Gastos diarios · {monthLabel(month)}</h1></header>
+        <MonthTabs path="/gastos" month={month} todayMonth={monthOf(today)} />
+        <BeforeStartNotice month={month} start={start} />
+      </div>
+    );
+  }
   const isCurrent = month === monthOf(today);
   const isFuture = month > monthOf(today);
   const b = getBudget(month, today);

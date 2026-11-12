@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { connection } from "next/server";
 import { Suspense } from "react";
+import { BeforeStartNotice } from "@/components/before-start";
 import { MonthTabs } from "@/components/month-tabs";
 import { PaymentRow } from "@/components/payment-row";
 import { cop, MEDAL_LABEL, monthLabel, pct } from "@/lib/format";
 import {
-  getBudget, getExpensesByCategory, getPayments, getSavingsGoal, getSummary, monthOf, parseMonth, toISO,
+  getBudget, getExpensesByCategory, getPayments, getSavingsGoal, getStartMonth, getSummary, monthOf, parseMonth,
+  toISO,
   upcomingPayments,
 } from "@/lib/finance";
 
@@ -26,6 +28,16 @@ async function Dashboard({ searchParams }: { searchParams: PageProps<"/">["searc
   await connection(); // datos del día: se calculan en cada visita
   const today = toISO(new Date());
   const month = parseMonth(sp.mes, today);
+  const start = getStartMonth(today);
+  if (month < start) {
+    return (
+      <>
+        <header><h1 className="text-2xl font-bold">Resumen de {monthLabel(month)}</h1></header>
+        <MonthTabs path="/" month={month} todayMonth={monthOf(today)} />
+        <BeforeStartNotice month={month} start={start} />
+      </>
+    );
+  }
   const isCurrent = month === monthOf(today);
   const s = getSummary(month, today);
   const goal = getSavingsGoal(month);

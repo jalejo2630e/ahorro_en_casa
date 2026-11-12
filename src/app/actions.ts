@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import {
   addExpense, addExtraIncome, addIncome, addIncomePlan, deactivateIncomePlan, deleteExpense, markIncomeReceived,
-  markPaid, monthOf, toISO, deleteIncomeEntry, unmarkIncomeReceived, unmarkPaid,
+  markPaid, monthOf, toISO, deleteIncomeEntry, setStartMonth, unmarkIncomeReceived, unmarkPaid,
 } from "@/lib/finance";
 import { cop } from "@/lib/format";
 import { FREQUENCY_LABEL, incomeOccurrences, type Frequency } from "@/lib/income";
@@ -144,6 +144,14 @@ export async function markIncomeReceivedAction(formData: FormData): Promise<void
     .safeParse(Object.fromEntries(formData));
   if (!parsed.success) throw new Error("Datos inválidos");
   markIncomeReceived(parsed.data.scheduleId, parsed.data.key, toISO(new Date()), "web", parsed.data.amount);
+  refresh();
+}
+
+/** Primer mes que llevas en la app; los anteriores no cuentan pagos ni ingresos. */
+export async function setStartMonthAction(formData: FormData): Promise<void> {
+  const parsed = z.object({ month: monthSchema }).safeParse(Object.fromEntries(formData));
+  if (!parsed.success) throw new Error("Mes inválido (usa AAAA-MM)");
+  setStartMonth(parsed.data.month);
   refresh();
 }
 

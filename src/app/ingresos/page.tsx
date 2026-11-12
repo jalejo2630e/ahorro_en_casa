@@ -3,11 +3,14 @@ import { Suspense } from "react";
 import {
   deactivateIncomeAction, deleteIncomeEntryAction, markIncomeReceivedAction, unmarkIncomeReceivedAction,
 } from "@/app/actions";
+import { BeforeStartNotice } from "@/components/before-start";
 import { IncomeForm } from "@/components/income-form";
 import { MonthTabs } from "@/components/month-tabs";
 import { StatusBadge } from "@/components/status-badge";
 import { cop, monthLabel } from "@/lib/format";
-import { getIncomeEntries, getIncomePlan, getSummary, listIncomePlans, monthOf, parseMonth, toISO } from "@/lib/finance";
+import {
+  getIncomeEntries, getIncomePlan, getStartMonth, getSummary, listIncomePlans, monthOf, parseMonth, toISO,
+} from "@/lib/finance";
 import { describeRule, FREQUENCY_LABEL, incomeOccurrences } from "@/lib/income";
 
 export const metadata = { title: "Ingresos · Ahorro en casa" };
@@ -33,6 +36,16 @@ async function Income({ searchParams }: { searchParams: PageProps<"/ingresos">["
   await connection();
   const today = toISO(new Date());
   const month = parseMonth(sp.mes, today);
+  const start = getStartMonth(today);
+  if (month < start) {
+    return (
+      <div className="space-y-6">
+        <header><h1 className="text-2xl font-bold">Ingresos · {monthLabel(month)}</h1></header>
+        <MonthTabs path="/ingresos" month={month} todayMonth={monthOf(today)} />
+        <BeforeStartNotice month={month} start={start} />
+      </div>
+    );
+  }
   const s = getSummary(month, today);
   const rows = getIncomePlan(month, today);
   const plans = listIncomePlans();

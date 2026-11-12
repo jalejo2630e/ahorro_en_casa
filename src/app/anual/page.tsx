@@ -2,7 +2,8 @@ import Link from "next/link";
 import { connection } from "next/server";
 import { Suspense } from "react";
 import { cop, MEDAL_LABEL, monthLabel } from "@/lib/format";
-import { getYearOverview, toISO } from "@/lib/finance";
+import { setStartMonthAction } from "@/app/actions";
+import { getStartMonth, getYearOverview, toISO } from "@/lib/finance";
 
 export const metadata = { title: "Año · Ahorro en casa" };
 
@@ -21,6 +22,7 @@ async function Year({ searchParams }: { searchParams: PageProps<"/anual">["searc
   const raw = Array.isArray(sp.anio) ? sp.anio[0] : sp.anio;
   const year = raw && /^\d{4}$/.test(raw) ? Number(raw) : Number(today.slice(0, 4));
   const months = getYearOverview(year, today);
+  const start = getStartMonth(today);
 
   const totals = months.reduce(
     (a, m) => ({ saved: a.saved + m.saved, obligations: a.obligations + m.obligations, paid: a.paid + m.paid }),
@@ -43,11 +45,46 @@ async function Year({ searchParams }: { searchParams: PageProps<"/anual">["searc
         </div>
       </header>
 
+      <section
+        aria-label="Fecha de inicio"
+        className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900"
+      >
+        <form action={setStartMonthAction} className="flex flex-wrap items-end gap-3">
+          <div>
+            <label htmlFor="start-month" className="mb-1 block text-sm font-medium">Empecé a llevar mis finanzas en</label>
+            <input
+              id="start-month" name="month" type="month" required defaultValue={start} placeholder="AAAA-MM"
+              pattern="[0-9]{4}-[0-9]{2}"
+              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
+            />
+          </div>
+          <button
+            type="submit"
+            className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
+          >
+            Guardar
+          </button>
+        </form>
+        <p className="mt-2 text-xs text-slate-500">
+          Los meses anteriores no cuentan pagos ni ingresos, así no aparecen como vencidos. Puedes moverla cuando quieras.
+        </p>
+      </section>
+
       <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {months.map((m) => {
           const isCurrent = m.month === today.slice(0, 7);
           const paidPct = m.obligations ? m.paid / m.obligations : 0;
           const savePct = m.target ? Math.min(m.saved / m.target, 1) : 0;
+          if (m.beforeStart) {
+            return (
+              <li key={m.month}>
+                <div className="rounded-2xl border border-dashed border-slate-300 p-4 text-slate-400 dark:border-slate-700">
+                  <h2 className="font-semibold">{monthLabel(m.month).split(" ")[0]}</h2>
+                  <p className="mt-2 text-xs">Antes de tu inicio</p>
+                </div>
+              </li>
+            );
+          }
           return (
             <li key={m.month}>
               <Link

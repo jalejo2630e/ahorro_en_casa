@@ -4,8 +4,9 @@ import { Suspense } from "react";
 import { PaymentRow } from "@/components/payment-row";
 import { DOT } from "@/components/status-badge";
 import { cop, monthLabel, shiftMonth } from "@/lib/format";
+import { BeforeStartNotice } from "@/components/before-start";
 import { MonthTabs } from "@/components/month-tabs";
-import { daysInMonth, getPayments, monthOf, parseMonth, toISO } from "@/lib/finance";
+import { daysInMonth, getPayments, getStartMonth, monthOf, parseMonth, toISO } from "@/lib/finance";
 
 export const metadata = { title: "Pagos obligatorios · Ahorro en casa" };
 
@@ -22,6 +23,16 @@ async function Calendar({ searchParams }: { searchParams: PageProps<"/pagos">["s
   await connection();
   const today = toISO(new Date());
   const month = parseMonth(sp.mes, today);
+  const start = getStartMonth(today);
+  if (month < start) {
+    return (
+      <div className="space-y-6">
+        <header><h1 className="text-2xl font-bold">Pagos de {monthLabel(month)}</h1></header>
+        <MonthTabs path="/pagos" month={month} todayMonth={monthOf(today)} />
+        <BeforeStartNotice month={month} start={start} />
+      </div>
+    );
+  }
 
   const payments = getPayments(month, today);
   const totals = {
