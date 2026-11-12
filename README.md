@@ -44,7 +44,11 @@ La app expone un servidor MCP en `http://localhost:3000/api/mcp` (HTTP, sin sesi
 2. Exporta la misma variable `MCP_TOKEN` en el entorno del cliente MCP y usa [.mcp.json](.mcp.json).
 3. Solo acepta peticiones con `Authorization: Bearer <token>` y desde `localhost`.
 
-Herramientas: `consultar_estado_financiero`, `registrar_gasto`, `ver_pagos_proximos`, `verificar_meta_ahorro`.
+Herramientas de consulta: `consultar_estado_financiero`, `ver_pagos_proximos`, `ver_ingresos_esperados`, `verificar_meta_ahorro`.
+
+Herramientas que escriben (solo agregan o marcan; **ninguna borra ni deshace** — los errores se corrigen desde la app):
+`registrar_gasto`, `registrar_dinero_extra`, `marcar_pago_pagado` y `marcar_ingreso_recibido` (las dos últimas aceptan el monto real).
+Todo lo registrado por MCP queda con origen `mcp`.
 
 ## Base de datos (SQLite en `data/`, no se sube a git)
 
