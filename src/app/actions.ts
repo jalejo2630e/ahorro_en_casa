@@ -129,10 +129,19 @@ export async function addIncomeAction(_prev: FormState, formData: FormData): Pro
 
 export async function markIncomeReceivedAction(formData: FormData): Promise<void> {
   const parsed = z
-    .object({ scheduleId: z.coerce.number().int().positive(), key: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) })
+    .object({
+      scheduleId: z.coerce.number().int().positive(),
+      key: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      // Vacío = el monto programado; si lo escribes, es lo que realmente recibiste
+      amount: z
+        .string()
+        .optional()
+        .transform((s) => (s && s.trim() !== "" ? Number(s.replace(/\D/g, "")) : undefined))
+        .pipe(z.number().int().positive().optional()),
+    })
     .safeParse(Object.fromEntries(formData));
   if (!parsed.success) throw new Error("Datos inválidos");
-  markIncomeReceived(parsed.data.scheduleId, parsed.data.key, toISO(new Date()));
+  markIncomeReceived(parsed.data.scheduleId, parsed.data.key, toISO(new Date()), "web", parsed.data.amount);
   refresh();
 }
 

@@ -106,6 +106,13 @@ async function Income({ searchParams }: { searchParams: PageProps<"/ingresos">["
                             <StatusBadge status={b.status} label={b.label} />
                             <input type="hidden" name="scheduleId" value={r.scheduleId} />
                             <input type="hidden" name="key" value={r.key} />
+                            <input
+                              name="amount"
+                              inputMode="numeric"
+                              placeholder={r.amount.toLocaleString("es-CO")}
+                              aria-label={`Monto recibido de ${r.name} (vacío = ${cop(r.amount)})`}
+                              className="w-24 rounded-md border border-slate-300 bg-white px-2 py-1 text-right text-xs tabular-nums dark:border-slate-700 dark:bg-slate-900"
+                            />
                             <button
                               type="submit"
                               className="rounded-md bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-emerald-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600"

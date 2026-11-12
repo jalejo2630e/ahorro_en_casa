@@ -247,7 +247,11 @@ export function getIncomePlan(month: string, today: string) {
 }
 
 /** Marca una ocurrencia esperada como recibida: crea el ingreso y aparta el % de ahorro. Idempotente. */
-export function markIncomeReceived(scheduleId: number, key: string, receivedOn: string, source: "web" | "mcp" = "web") {
+export function markIncomeReceived(
+  scheduleId: number, key: string, receivedOn: string, source: "web" | "mcp" = "web",
+  amount?: number, // monto realmente recibido; si falta, el programado
+) {
+  if (amount !== undefined && (!Number.isInteger(amount) || amount <= 0)) throw new Error("Monto inválido");
   return db.transaction((tx) => {
     const plan = tx.select().from(incomeSchedule).where(eq(incomeSchedule.id, scheduleId)).get();
     if (!plan) throw new Error("Ingreso no encontrado");
@@ -260,7 +264,7 @@ export function markIncomeReceived(scheduleId: number, key: string, receivedOn: 
 
     // El ingreso pertenece al mes de la ocurrencia que se marca, aunque se marque en otro momento
     const date = dateWithinMonth(key.slice(0, 7), key.endsWith("-00") ? null : key, receivedOn);
-    const r = applyIncome(tx, { concept: plan.name, amount: plan.amount, date, savePercent: plan.savePercent }, source);
+    const r = applyIncome(tx, { concept: plan.name, amount: amount ?? plan.amount, date, savePercent: plan.savePercent }, source);
     tx.insert(incomeReceipts).values({ scheduleId, occurrence: key, transactionId: r.transaction.id }).run();
     return { alreadyReceived: false as const, saved: r.saved };
   });

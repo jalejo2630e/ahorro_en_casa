@@ -175,6 +175,24 @@ f.markIncomeReceived(feb.scheduleId, feb.key, today);
 const febEntry = f.getIncomeEntries("2027-02")[0];
 assert.equal(febEntry.linked, true);
 assert.equal(f.deleteIncomeEntry(febEntry.id), false);
+
+// ---- Marcar recibido con el monto REAL (un domingo llegaron 100.000 y no los 200.000 programados)
+const sun = f.getIncomePlan("2026-12", today).find((p) => p.name === "Ingreso dominical" && p.key === "2026-12-06")!;
+assert.equal(sun.amount, 200_000); // lo programado
+const decBefore = f.getSummary("2026-12", today).income;
+assert.throws(() => f.markIncomeReceived(sun.scheduleId, sun.key, today, "web", -5)); // monto inválido
+assert.throws(() => f.markIncomeReceived(sun.scheduleId, sun.key, today, "web", 1.5));
+f.markIncomeReceived(sun.scheduleId, sun.key, today, "web", 100_000);
+assert.equal(f.getSummary("2026-12", today).income, decBefore + 100_000); // cuenta lo recibido
+assert.equal(f.getSummary("2026-12", today).expectedIncome, 5_800_000); // lo esperado no cambia
+assert.equal(f.getIncomeEntries("2026-12").find((e) => e.date === "2026-12-06")!.amount, 100_000);
+assert.equal(f.getIncomePlan("2026-12", today).find((p) => p.key === sun.key)!.status, "recibido");
+assert.equal(f.unmarkIncomeReceived(sun.scheduleId, sun.key), true);
+assert.equal(f.getSummary("2026-12", today).income, decBefore);
+// sin monto: usa el programado
+f.markIncomeReceived(sun.scheduleId, sun.key, today);
+assert.equal(f.getSummary("2026-12", today).income, decBefore + 200_000);
+f.unmarkIncomeReceived(sun.scheduleId, sun.key);
 console.log("finance OK", s);
 }
 main();
