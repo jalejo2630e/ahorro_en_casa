@@ -139,7 +139,7 @@ async function Income({ searchParams }: { searchParams: PageProps<"/ingresos">["
                       <span className="min-w-0 flex-1">
                         <span className="block truncate">{e.concept}</span>
                         <span className="text-xs text-slate-500">
-                          {e.linked ? "marcado en Pagos esperados" : "registrado a mano"}
+                          {e.linked ? "vinculado a Pagos esperados" : "registrado a mano"}
                           {e.saved > 0 && ` · apartó ${cop(e.saved)}`}
                         </span>
                       </span>
