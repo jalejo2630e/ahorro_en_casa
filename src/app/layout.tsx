@@ -11,6 +11,8 @@ const geistSans = Geist({
 export const metadata: Metadata = {
   title: "Ahorro en casa",
   description: "Finanzas personales y familiares: pagos, ahorro y metas.",
+  icons: { icon: "/icons/192", apple: "/icons/180" },
+  appleWebApp: { capable: true, title: "Ahorro", statusBarStyle: "default" },
 };
 
 export const viewport: Viewport = {
