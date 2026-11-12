@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "ahorro-en-casa": {
+      "type": "http",
+      "url": "http://localhost:3000/api/mcp",
+      "headers": {
+        "Authorization": "Bearer ${MCP_TOKEN}"
+      }
+    }
+  }
+}
