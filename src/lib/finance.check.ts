@@ -137,6 +137,44 @@ assert.equal(f.deleteExpense(gift.id), true);
 assert.equal(f.getSummary("2026-12", D(11)).extraReceived, 0);
 const sueldo = f.getDailyEntries("2026-12").find((e) => e.concept === "Pago principal");
 assert.equal(sueldo, undefined); // los ingresos planeados no aparecen entre los movimientos diarios
+
+// ---- Lo que marcas pertenece a SU mes, no al mes en que haces clic (hoy es noviembre)
+const jan = f.getIncomePlan("2027-01", today).find((p) => p.name === "Pago principal")!;
+assert.equal(jan.key, "2027-01-30");
+const novIncomeBefore = f.getSummary("2026-11", today).income;
+f.markIncomeReceived(jan.scheduleId, jan.key, today); // se marca HOY (nov) un ingreso de enero
+assert.equal(f.getSummary("2026-11", today).income, novIncomeBefore); // no contó en noviembre
+assert.equal(f.getSummary("2027-01", today).income, 3_500_000); // contó en enero
+assert.equal(f.getIncomeEntries("2027-01")[0].date, "2027-01-30"); // fechado dentro de enero
+assert.equal(f.getSavingsGoal("2027-01").saved, 1_050_000);
+
+const arrJan = f.getPayments("2027-01", today).find((p) => p.name === "Arriendo")!;
+const novExpBefore = f.getSummary("2026-11", today).expenses;
+f.markPaid(arrJan.id, "2027-01", today);
+assert.equal(f.getSummary("2026-11", today).expenses, novExpBefore); // el pago de enero no cuenta en noviembre
+assert.equal(f.getSummary("2027-01", today).expenses, 1_200_000);
+
+// ---- Deshacer
+assert.equal(f.unmarkPaid(arrJan.id, "2027-01"), true);
+assert.equal(f.unmarkPaid(arrJan.id, "2027-01"), false); // ya no está pagado
+assert.equal(f.getSummary("2027-01", today).expenses, 0);
+assert.equal(f.getPayments("2027-01", today).find((p) => p.name === "Arriendo")!.status, "pendiente");
+assert.equal(f.unmarkIncomeReceived(jan.scheduleId, jan.key), true);
+assert.equal(f.getSummary("2027-01", today).income, 0);
+assert.equal(f.getSavingsGoal("2027-01").saved, 0); // también revierte lo apartado al ahorro
+assert.equal(f.getIncomePlan("2027-01", today).find((p) => p.key === jan.key)!.status, "pendiente");
+
+// ---- Ingresos a mano: se pueden borrar; los marcados desde "Pagos esperados" se deshacen, no se borran
+const manual = f.addIncome({ concept: "pago manual", amount: 500_000, date: "2027-02-10", savePercent: 20 });
+assert.equal(f.getSavingsGoal("2027-02").saved, 100_000);
+assert.equal(f.deleteIncomeEntry(manual.transaction.id), true);
+assert.equal(f.getSavingsGoal("2027-02").saved, 0);
+assert.equal(f.getIncomeEntries("2027-02").length, 0);
+const feb = f.getIncomePlan("2027-02", today).find((p) => p.name === "Pago principal")!;
+f.markIncomeReceived(feb.scheduleId, feb.key, today);
+const febEntry = f.getIncomeEntries("2027-02")[0];
+assert.equal(febEntry.linked, true);
+assert.equal(f.deleteIncomeEntry(febEntry.id), false);
 console.log("finance OK", s);
 }
 main();

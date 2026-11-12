@@ -1,4 +1,4 @@
-import { markPaidAction } from "@/app/actions";
+import { markPaidAction, unmarkPaidAction } from "@/app/actions";
 import { cop } from "@/lib/format";
 import type { getPayments } from "@/lib/finance";
 import { StatusBadge } from "./status-badge";
@@ -30,7 +30,17 @@ export function PaymentRow({ p, month }: { p: Payment; month: string }) {
       <div className="flex flex-col items-end gap-1.5">
         <p className="font-semibold tabular-nums">{cop(p.amount)}</p>
         {p.status === "pagado" ? (
-          <StatusBadge status="pagado" />
+          <form action={unmarkPaidAction} className="flex items-center gap-2">
+            <StatusBadge status="pagado" />
+            <input type="hidden" name="scheduleId" value={p.id} />
+            <input type="hidden" name="month" value={month} />
+            <button
+              type="submit"
+              className="text-xs text-slate-500 underline hover:text-red-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-600"
+            >
+              Deshacer
+            </button>
+          </form>
         ) : (
           <form action={markPaidAction} className="flex items-center gap-2">
             <StatusBadge status={p.status} />

@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import {
   addExpense, addExtraIncome, addIncome, addIncomePlan, deactivateIncomePlan, deleteExpense, markIncomeReceived,
-  markPaid, monthOf, toISO,
+  markPaid, monthOf, toISO, deleteIncomeEntry, unmarkIncomeReceived, unmarkPaid,
 } from "@/lib/finance";
 import { cop } from "@/lib/format";
 import { FREQUENCY_LABEL, incomeOccurrences, type Frequency } from "@/lib/income";
@@ -133,6 +133,32 @@ export async function markIncomeReceivedAction(formData: FormData): Promise<void
     .safeParse(Object.fromEntries(formData));
   if (!parsed.success) throw new Error("Datos inválidos");
   markIncomeReceived(parsed.data.scheduleId, parsed.data.key, toISO(new Date()));
+  refresh();
+}
+
+export async function unmarkPaidAction(formData: FormData): Promise<void> {
+  const parsed = z
+    .object({ scheduleId: z.coerce.number().int().positive(), month: monthSchema })
+    .safeParse(Object.fromEntries(formData));
+  if (!parsed.success) throw new Error("Datos inválidos");
+  unmarkPaid(parsed.data.scheduleId, parsed.data.month);
+  refresh();
+}
+
+export async function unmarkIncomeReceivedAction(formData: FormData): Promise<void> {
+  const parsed = z
+    .object({ scheduleId: z.coerce.number().int().positive(), key: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) })
+    .safeParse(Object.fromEntries(formData));
+  if (!parsed.success) throw new Error("Datos inválidos");
+  unmarkIncomeReceived(parsed.data.scheduleId, parsed.data.key);
+  refresh();
+}
+
+/** Quita un ingreso registrado a mano. Los marcados desde "Pagos esperados" se deshacen con su propio botón. */
+export async function deleteIncomeEntryAction(formData: FormData): Promise<void> {
+  const parsed = z.object({ id: z.coerce.number().int().positive() }).safeParse(Object.fromEntries(formData));
+  if (!parsed.success) throw new Error("Datos inválidos");
+  deleteIncomeEntry(parsed.data.id);
   refresh();
 }
 

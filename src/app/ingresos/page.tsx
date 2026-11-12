@@ -1,11 +1,13 @@
 import { connection } from "next/server";
 import { Suspense } from "react";
-import { deactivateIncomeAction, markIncomeReceivedAction } from "@/app/actions";
+import {
+  deactivateIncomeAction, deleteIncomeEntryAction, markIncomeReceivedAction, unmarkIncomeReceivedAction,
+} from "@/app/actions";
 import { IncomeForm } from "@/components/income-form";
 import { MonthTabs } from "@/components/month-tabs";
 import { StatusBadge } from "@/components/status-badge";
 import { cop, monthLabel } from "@/lib/format";
-import { getIncomePlan, getSummary, listIncomePlans, monthOf, parseMonth, toISO } from "@/lib/finance";
+import { getIncomeEntries, getIncomePlan, getSummary, listIncomePlans, monthOf, parseMonth, toISO } from "@/lib/finance";
 import { describeRule, FREQUENCY_LABEL, incomeOccurrences } from "@/lib/income";
 
 export const metadata = { title: "Ingresos · Ahorro en casa" };
@@ -34,6 +36,7 @@ async function Income({ searchParams }: { searchParams: PageProps<"/ingresos">["
   const s = getSummary(month, today);
   const rows = getIncomePlan(month, today);
   const plans = listIncomePlans();
+  const entries = getIncomeEntries(month);
   const pendingTotal = rows.filter((r) => r.status !== "recibido").reduce((a, r) => a + r.amount, 0);
 
   return (
@@ -87,7 +90,17 @@ async function Income({ searchParams }: { searchParams: PageProps<"/ingresos">["
                       <div className="flex flex-col items-end gap-1.5">
                         <p className="font-semibold tabular-nums">{cop(r.amount)}</p>
                         {r.status === "recibido" ? (
-                          <StatusBadge status={b.status} label={b.label} />
+                          <form action={unmarkIncomeReceivedAction} className="flex items-center gap-2">
+                            <StatusBadge status={b.status} label={b.label} />
+                            <input type="hidden" name="scheduleId" value={r.scheduleId} />
+                            <input type="hidden" name="key" value={r.key} />
+                            <button
+                              type="submit"
+                              className="text-xs text-slate-500 underline hover:text-red-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-600"
+                            >
+                              Deshacer
+                            </button>
+                          </form>
                         ) : (
                           <form action={markIncomeReceivedAction} className="flex items-center gap-2">
                             <StatusBadge status={b.status} label={b.label} />
@@ -106,6 +119,53 @@ async function Income({ searchParams }: { searchParams: PageProps<"/ingresos">["
                   );
                 })}
               </ul>
+            )}
+          </section>
+
+          <section className={card} aria-label="Ingresos recibidos">
+            <h2 className="mb-1 font-semibold">Ingresos recibidos</h2>
+            <p className="mb-2 text-xs text-slate-500">
+              Todo lo que ya entró en {monthLabel(month)}. Si un sueldo aparece dos veces, quita el registrado a mano (✕) o
+              deshaz el que marcaste en “Pagos esperados”.
+            </p>
+            {entries.length === 0 ? (
+              <p className="py-4 text-center text-sm text-slate-500">Todavía no hay ingresos recibidos este mes.</p>
+            ) : (
+              <>
+                <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {entries.map((e) => (
+                    <li key={e.id} className="flex items-center gap-3 py-2.5 text-sm">
+                      <span className="w-8 shrink-0 text-center font-semibold tabular-nums">{Number(e.date.slice(8))}</span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate">{e.concept}</span>
+                        <span className="text-xs text-slate-500">
+                          {e.linked ? "marcado en Pagos esperados" : "registrado a mano"}
+                          {e.saved > 0 && ` · apartó ${cop(e.saved)}`}
+                        </span>
+                      </span>
+                      <span className="font-semibold tabular-nums">{cop(e.amount)}</span>
+                      {e.linked ? (
+                        <span className="w-6" aria-hidden />
+                      ) : (
+                        <form action={deleteIncomeEntryAction}>
+                          <input type="hidden" name="id" value={e.id} />
+                          <button
+                            type="submit"
+                            aria-label={`Quitar ${e.concept}`}
+                            className="rounded px-1.5 text-slate-400 hover:text-red-600 focus-visible:outline-2 focus-visible:outline-red-600"
+                          >
+                            ✕
+                          </button>
+                        </form>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-2 flex justify-between border-t border-slate-100 pt-2 text-sm font-semibold dark:border-slate-800">
+                  <span>Total recibido</span>
+                  <span className="tabular-nums">{cop(entries.reduce((a, e) => a + e.amount, 0))}</span>
+                </p>
+              </>
             )}
           </section>
 

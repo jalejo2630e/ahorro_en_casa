@@ -91,18 +91,38 @@ export function markPaid(scheduleId: number, month: string, paidOn: string, sour
       .where(and(eq(paymentStatus.scheduleId, scheduleId), eq(paymentStatus.month, month))).get();
     if (existing?.paidAt) return { alreadyPaid: true as const };
 
+    // El pago pertenece al mes que se está marcando: se fecha dentro de ese mes, no con la fecha de hoy
+    const date = dateWithinMonth(month, dueDate(month, item.dayOfMonth), paidOn);
     const pid = pocketId("Gastos del mes");
     const t = tx.insert(transactions).values({
       type: "gasto", concept: item.name, amount: item.amount, categoryId: item.categoryId,
-      pocketId: pid, date: paidOn, scheduleId, source,
+      pocketId: pid, date, scheduleId, source,
     }).returning().get();
     adjustPocket(pid, -item.amount);
     if (existing) {
-      tx.update(paymentStatus).set({ paidAt: paidOn, transactionId: t.id }).where(eq(paymentStatus.id, existing.id)).run();
+      tx.update(paymentStatus).set({ paidAt: date, transactionId: t.id }).where(eq(paymentStatus.id, existing.id)).run();
     } else {
-      tx.insert(paymentStatus).values({ scheduleId, month, paidAt: paidOn, transactionId: t.id }).run();
+      tx.insert(paymentStatus).values({ scheduleId, month, paidAt: date, transactionId: t.id }).run();
     }
     return { alreadyPaid: false as const, transactionId: t.id };
+  });
+}
+
+/** Deshace "pagado": borra el gasto de ese pago y devuelve el monto al bolsillo. */
+export function unmarkPaid(scheduleId: number, month: string): boolean {
+  return db.transaction((tx) => {
+    const st = tx.select().from(paymentStatus)
+      .where(and(eq(paymentStatus.scheduleId, scheduleId), eq(paymentStatus.month, month))).get();
+    if (!st?.paidAt) return false;
+    const t = st.transactionId
+      ? tx.select().from(transactions).where(eq(transactions.id, st.transactionId)).get()
+      : undefined;
+    if (t) {
+      adjustPocket(t.pocketId, t.amount);
+      tx.delete(transactions).where(eq(transactions.id, t.id)).run();
+    }
+    tx.update(paymentStatus).set({ paidAt: null, transactionId: null }).where(eq(paymentStatus.id, st.id)).run();
+    return true;
   });
 }
 
@@ -123,6 +143,16 @@ export function addExpense(
     adjustPocket(pid, -input.amount);
     return t;
   });
+}
+
+/**
+ * Fecha con la que se registra un movimiento que pertenece a `month`: hoy si es el mes actual;
+ * si es de otro mes, la fecha propia del movimiento (o el último día del mes si no tiene).
+ * Así lo que marcas en un mes nunca se cuenta en otro.
+ */
+function dateWithinMonth(month: string, own: string | null, today: string): string {
+  if (monthOf(today) === month) return today;
+  return own ?? `${month}-${String(daysInMonth(month)).padStart(2, "0")}`;
 }
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -228,9 +258,63 @@ export function markIncomeReceived(scheduleId: number, key: string, receivedOn: 
       .where(and(eq(incomeReceipts.scheduleId, scheduleId), eq(incomeReceipts.occurrence, key))).get();
     if (existing) return { alreadyReceived: true as const };
 
-    const r = applyIncome(tx, { concept: plan.name, amount: plan.amount, date: receivedOn, savePercent: plan.savePercent }, source);
+    // El ingreso pertenece al mes de la ocurrencia que se marca, aunque se marque en otro momento
+    const date = dateWithinMonth(key.slice(0, 7), key.endsWith("-00") ? null : key, receivedOn);
+    const r = applyIncome(tx, { concept: plan.name, amount: plan.amount, date, savePercent: plan.savePercent }, source);
     tx.insert(incomeReceipts).values({ scheduleId, occurrence: key, transactionId: r.transaction.id }).run();
     return { alreadyReceived: false as const, saved: r.saved };
+  });
+}
+
+/** Revierte un ingreso: quita del bolsillo lo gastable y lo apartado al ahorro. */
+function reverseIncome(t: typeof transactions.$inferSelect) {
+  adjustPocket(pocketId("Gastos del mes"), -(t.amount - t.saved));
+  adjustPocket(pocketId("Ahorro intocable"), -t.saved);
+}
+
+/** Deshace "recibido": borra el ingreso de esa ocurrencia y revierte bolsillos y ahorro. */
+export function unmarkIncomeReceived(scheduleId: number, key: string): boolean {
+  return db.transaction((tx) => {
+    const r = tx.select().from(incomeReceipts)
+      .where(and(eq(incomeReceipts.scheduleId, scheduleId), eq(incomeReceipts.occurrence, key))).get();
+    if (!r) return false;
+    const t = r.transactionId
+      ? tx.select().from(transactions).where(eq(transactions.id, r.transactionId)).get()
+      : undefined;
+    if (t) {
+      reverseIncome(t);
+      tx.delete(transactions).where(eq(transactions.id, t.id)).run();
+    }
+    tx.delete(incomeReceipts).where(eq(incomeReceipts.id, r.id)).run();
+    return true;
+  });
+}
+
+/** Ingresos recibidos del mes (sin dinero extra). `linked` = vienen de marcar un pago esperado. */
+export function getIncomeEntries(month: string) {
+  return db
+    .select({
+      id: transactions.id, concept: transactions.concept, amount: transactions.amount,
+      saved: transactions.saved, date: transactions.date, receiptId: incomeReceipts.id,
+    })
+    .from(transactions)
+    .leftJoin(incomeReceipts, eq(incomeReceipts.transactionId, transactions.id))
+    .where(and(eq(transactions.type, "ingreso"), eq(transactions.extra, 0), like(transactions.date, `${month}-%`)))
+    .orderBy(sql`${transactions.date} asc`, sql`${transactions.id} asc`)
+    .all()
+    .map(({ receiptId, ...r }) => ({ ...r, linked: receiptId != null }));
+}
+
+/** Borra un ingreso registrado a mano (nunca uno marcado desde Pagos esperados: ese se deshace). */
+export function deleteIncomeEntry(id: number): boolean {
+  return db.transaction((tx) => {
+    const t = tx.select().from(transactions)
+      .where(and(eq(transactions.id, id), eq(transactions.type, "ingreso"), eq(transactions.extra, 0))).get();
+    if (!t) return false;
+    if (tx.select().from(incomeReceipts).where(eq(incomeReceipts.transactionId, id)).get()) return false;
+    reverseIncome(t);
+    tx.delete(transactions).where(eq(transactions.id, id)).run();
+    return true;
   });
 }
 
