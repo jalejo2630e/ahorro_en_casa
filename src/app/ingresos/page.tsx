@@ -12,6 +12,7 @@ import {
   getIncomeEntries, getIncomePlan, getStartMonth, getSummary, listIncomePlans, monthOf, parseMonth, toISO,
 } from "@/lib/finance";
 import { describeRule, FREQUENCY_LABEL, incomeOccurrences } from "@/lib/income";
+import { requireUser } from "@/lib/auth";
 
 export const metadata = { title: "Ingresos · Ahorro en casa" };
 
@@ -34,6 +35,7 @@ export default function IncomePage({ searchParams }: PageProps<"/ingresos">) {
 async function Income({ searchParams }: { searchParams: PageProps<"/ingresos">["searchParams"] }) {
   const sp = await searchParams;
   await connection();
+  await requireUser();
   const today = toISO(new Date());
   const month = parseMonth(sp.mes, today);
   const start = getStartMonth(today);
@@ -160,6 +162,7 @@ async function Income({ searchParams }: { searchParams: PageProps<"/ingresos">["
                         <span className="block truncate">{e.concept}</span>
                         <span className="text-xs text-slate-500">
                           {e.linked ? "vinculado a Pagos esperados" : "registrado a mano"}
+                          {e.by && ` · ${e.by}`}
                           {e.saved > 0 && ` · apartó ${cop(e.saved)}`}
                         </span>
                       </span>

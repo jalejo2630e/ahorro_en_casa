@@ -4,6 +4,7 @@ import { Suspense } from "react";
 import { cop, MEDAL_LABEL, monthLabel } from "@/lib/format";
 import { setStartMonthAction } from "@/app/actions";
 import { getStartMonth, getYearOverview, toISO } from "@/lib/finance";
+import { requireUser } from "@/lib/auth";
 
 export const metadata = { title: "Año · Ahorro en casa" };
 
@@ -18,6 +19,7 @@ export default function YearPage({ searchParams }: PageProps<"/anual">) {
 async function Year({ searchParams }: { searchParams: PageProps<"/anual">["searchParams"] }) {
   const sp = await searchParams;
   await connection();
+  await requireUser();
   const today = toISO(new Date());
   const raw = Array.isArray(sp.anio) ? sp.anio[0] : sp.anio;
   const year = raw && /^\d{4}$/.test(raw) ? Number(raw) : Number(today.slice(0, 4));

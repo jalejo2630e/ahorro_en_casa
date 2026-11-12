@@ -30,6 +30,9 @@ export const transactions = sqliteTable("transactions", {
   // Dinero extra (regalos, etc.) que suma al presupuesto de gastos diarios; NO es ingreso planeado.
   // 0 / 1 (entero simple, para que el DDL coincida con el ALTER TABLE).
   extra: integer("extra").notNull().default(0),
+  // Quién registró el movimiento (null = asistente MCP, o anterior a los usuarios). Sin FK a propósito:
+  // así el ALTER TABLE manual coincide con el esquema y drizzle-kit no reconstruye la tabla.
+  userId: integer("user_id"),
 });
 
 // Bolsillos virtuales (ahorro intocable, arriendo blindado, etc.)
@@ -108,4 +111,28 @@ export const incomeReceipts = sqliteTable(
 export const settings = sqliteTable("settings", {
   key: text("key").primaryKey(),
   value: text("value").notNull(),
+});
+
+// ---------- Usuarios y sesiones ----------
+// Los datos financieros son compartidos por todo el hogar; los usuarios solo controlan quién entra
+// (y quién registró cada movimiento). OJO: src/db/index.ts crea estas tablas con CREATE TABLE IF NOT EXISTS;
+// si cambias estas definiciones, regenera ese SQL (deben coincidir exactamente).
+export const users = sqliteTable("users", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  username: text("username").notNull().unique(), // minúsculas, único
+  name: text("name").notNull(), // nombre para mostrar
+  pinHash: text("pin_hash").notNull(), // scrypt; nunca el PIN
+  role: text("role", { enum: ["admin", "member"] }).notNull().default("member"),
+  failedAttempts: integer("failed_attempts").notNull().default(0),
+  lockedUntil: integer("locked_until"), // epoch ms; null = sin bloqueo
+  active: integer("active", { mode: "boolean" }).notNull().default(true),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+// Se guarda el hash (sha256) del token, no el token: si alguien lee la base no puede usar las sesiones.
+export const sessions = sqliteTable("sessions", {
+  id: text("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  expiresAt: integer("expires_at").notNull(), // epoch ms
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });

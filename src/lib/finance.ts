@@ -2,7 +2,7 @@ import { and, eq, isNull, like, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   categories, incomeReceipts, incomeSchedule, paymentSchedule, paymentStatus, pockets, savingsGoals,
-  settings, transactions,
+  settings, transactions, users,
 } from "@/db/schema";
 import { daysBetween, daysInMonth, dueDate, monthOf } from "./dates";
 import { incomeOccurrences, type IncomeRule } from "./income";
@@ -115,6 +115,7 @@ function adjustPocket(id: number | null, delta: number) {
 export function markPaid(
   scheduleId: number, month: string, paidOn: string, source: "web" | "mcp" = "web",
   amount?: number, // monto realmente pagado; si falta, el programado
+  userId?: number, // quién lo registra (null = asistente MCP)
 ) {
   if (amount !== undefined && (!Number.isInteger(amount) || amount <= 0)) throw new Error("Monto inválido");
   return db.transaction((tx) => {
@@ -131,7 +132,7 @@ export function markPaid(
     const pid = pocketId("Gastos del mes");
     const t = tx.insert(transactions).values({
       type: "gasto", concept: item.name, amount: paid, categoryId: item.categoryId,
-      pocketId: pid, date, scheduleId, source,
+      pocketId: pid, date, scheduleId, source, userId: userId ?? null,
     }).returning().get();
     adjustPocket(pid, -paid);
     if (existing) {
@@ -162,7 +163,7 @@ export function unmarkPaid(scheduleId: number, month: string): boolean {
 }
 
 export function addExpense(
-  input: { concept: string; amount: number; category?: string; date: string },
+  input: { concept: string; amount: number; category?: string; date: string; userId?: number },
   source: "web" | "mcp" = "web",
 ) {
   if (!Number.isInteger(input.amount) || input.amount <= 0) throw new Error("Monto inválido");
@@ -173,7 +174,7 @@ export function addExpense(
     const pid = pocketId("Gastos del mes");
     const t = tx.insert(transactions).values({
       type: "gasto", concept: input.concept, amount: input.amount,
-      categoryId: cat?.id ?? null, pocketId: pid, date: input.date, source,
+      categoryId: cat?.id ?? null, pocketId: pid, date: input.date, source, userId: input.userId ?? null,
     }).returning().get();
     adjustPocket(pid, -input.amount);
     return t;
@@ -194,7 +195,7 @@ type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 function applyIncome(
   tx: Tx,
-  input: { concept: string; amount: number; date: string; savePercent?: number; extra?: boolean },
+  input: { concept: string; amount: number; date: string; savePercent?: number; extra?: boolean; userId?: number },
   source: "web" | "mcp",
 ) {
   if (!Number.isInteger(input.amount) || input.amount <= 0) throw new Error("Monto inválido");
@@ -204,6 +205,7 @@ function applyIncome(
   const spendable = input.amount - saved;
   const t = tx.insert(transactions).values({
     type: "ingreso", concept: input.concept, amount: input.amount, saved, extra: input.extra ? 1 : 0,
+    userId: input.userId ?? null,
     pocketId: pocketId("Gastos del mes"), date: input.date, source,
   }).returning().get();
   adjustPocket(pocketId("Gastos del mes"), spendable);
@@ -213,7 +215,7 @@ function applyIncome(
 
 /** Registra un ingreso recibido y aparta automáticamente savePercent % al ahorro intocable. */
 export function addIncome(
-  input: { concept: string; amount: number; date: string; savePercent?: number },
+  input: { concept: string; amount: number; date: string; savePercent?: number; userId?: number },
   source: "web" | "mcp" = "web",
 ) {
   return db.transaction((tx) => applyIncome(tx, input, source));
@@ -221,7 +223,7 @@ export function addIncome(
 
 /** Dinero extra (regalo, devolución…): suma al presupuesto de gastos diarios, no cuenta como ingreso del mes. */
 export function addExtraIncome(
-  input: { concept: string; amount: number; date: string },
+  input: { concept: string; amount: number; date: string; userId?: number },
   source: "web" | "mcp" = "web",
 ) {
   return db.transaction((tx) => applyIncome(tx, { ...input, extra: true }, source).transaction);
@@ -286,6 +288,7 @@ export function getIncomePlan(month: string, today: string) {
 export function markIncomeReceived(
   scheduleId: number, key: string, receivedOn: string, source: "web" | "mcp" = "web",
   amount?: number, // monto realmente recibido; si falta, el programado
+  userId?: number, // quién lo registra (null = asistente MCP)
 ) {
   if (amount !== undefined && (!Number.isInteger(amount) || amount <= 0)) throw new Error("Monto inválido");
   return db.transaction((tx) => {
@@ -300,7 +303,7 @@ export function markIncomeReceived(
 
     // El ingreso pertenece al mes de la ocurrencia que se marca, aunque se marque en otro momento
     const date = dateWithinMonth(key.slice(0, 7), key.endsWith("-00") ? null : key, receivedOn);
-    const r = applyIncome(tx, { concept: plan.name, amount: amount ?? plan.amount, date, savePercent: plan.savePercent }, source);
+    const r = applyIncome(tx, { concept: plan.name, amount: amount ?? plan.amount, date, savePercent: plan.savePercent, userId }, source);
     tx.insert(incomeReceipts).values({ scheduleId, occurrence: key, transactionId: r.transaction.id }).run();
     return { alreadyReceived: false as const, saved: r.saved };
   });
@@ -336,13 +339,15 @@ export function getIncomeEntries(month: string) {
     .select({
       id: transactions.id, concept: transactions.concept, amount: transactions.amount,
       saved: transactions.saved, date: transactions.date, receiptId: incomeReceipts.id,
+      userName: users.name, source: transactions.source,
     })
     .from(transactions)
     .leftJoin(incomeReceipts, eq(incomeReceipts.transactionId, transactions.id))
+    .leftJoin(users, eq(users.id, transactions.userId))
     .where(and(eq(transactions.type, "ingreso"), eq(transactions.extra, 0), like(transactions.date, `${month}-%`)))
     .orderBy(sql`${transactions.date} asc`, sql`${transactions.id} asc`)
     .all()
-    .map(({ receiptId, ...r }) => ({ ...r, linked: receiptId != null }));
+    .map(({ receiptId, userName, source, ...r }) => ({ ...r, linked: receiptId != null, by: whoLabel(userName, source) }));
 }
 
 /** Borra un ingreso registrado a mano (nunca uno marcado desde Pagos esperados: ese se deshace). */
@@ -375,7 +380,13 @@ export function getDailyExpenses(month: string) {
 export type DailyEntry = {
   id: number; kind: "gasto" | "extra"; concept: string; amount: number; date: string;
   category: string | null; color: string | null;
+  /** Quién lo registró: nombre del usuario; "Asistente" si vino del MCP; null si es anterior a los usuarios. */
+  by: string | null;
 };
+
+/** Texto de "quién" para un movimiento: el usuario, o el asistente si vino por MCP. */
+export const whoLabel = (userName: string | null, source: string): string | null =>
+  userName ?? (source === "mcp" ? "Asistente" : null);
 
 /** Movimientos del día a día: gastos diarios y dinero extra recibido (más recientes primero). */
 export function getDailyEntries(month: string): DailyEntry[] {
@@ -383,9 +394,11 @@ export function getDailyEntries(month: string): DailyEntry[] {
     .select({
       id: transactions.id, type: transactions.type, concept: transactions.concept, amount: transactions.amount,
       date: transactions.date, category: categories.name, color: categories.color,
+      userName: users.name, source: transactions.source,
     })
     .from(transactions)
     .leftJoin(categories, eq(categories.id, transactions.categoryId))
+    .leftJoin(users, eq(users.id, transactions.userId))
     .where(and(
       like(transactions.date, `${month}-%`),
       or(
@@ -395,7 +408,9 @@ export function getDailyEntries(month: string): DailyEntry[] {
     ))
     .orderBy(sql`${transactions.date} desc`, sql`${transactions.id} desc`)
     .all()
-    .map(({ type, ...r }) => ({ ...r, kind: type === "gasto" ? ("gasto" as const) : ("extra" as const) }));
+    .map(({ type, userName, source, ...r }) => ({
+      ...r, by: whoLabel(userName, source), kind: type === "gasto" ? ("gasto" as const) : ("extra" as const),
+    }));
 }
 
 /** Borra un gasto diario o un dinero extra (nunca un pago obligatorio ni un ingreso planeado) y ajusta el bolsillo. */

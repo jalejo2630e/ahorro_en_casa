@@ -11,6 +11,7 @@ import {
   type DailyEntry, type LedgerDay,
 } from "@/lib/finance";
 import { WEEKDAY_NAMES } from "@/lib/income";
+import { requireUser } from "@/lib/auth";
 
 export const metadata = { title: "Gastos diarios · Ahorro en casa" };
 
@@ -36,6 +37,7 @@ function addDays(iso: string, n: number): string {
 async function Expenses({ searchParams }: { searchParams: PageProps<"/gastos">["searchParams"] }) {
   const sp = await searchParams;
   await connection();
+  await requireUser();
   const today = toISO(new Date());
   const month = parseMonth(sp.mes, today);
   const start = getStartMonth(today);
@@ -224,7 +226,7 @@ function EntryRow({ e, withDate }: { e: DailyEntry; withDate?: boolean }) {
       <span aria-hidden className="size-2.5 shrink-0 rounded-full" style={{ background: extra ? "#10b981" : (e.color ?? "#94a3b8") }} />
       <span className="min-w-0 flex-1 truncate">
         {e.concept}{" "}
-        <span className="text-xs text-slate-500">· {extra ? "dinero extra" : (e.category ?? "Sin categoría")}{withDate && ` · ${e.date}`}</span>
+        <span className="text-xs text-slate-500">· {extra ? "dinero extra" : (e.category ?? "Sin categoría")}{withDate && ` · ${e.date}`}{e.by && ` · ${e.by}`}</span>
       </span>
       <span className={`tabular-nums ${extra ? "text-emerald-700 dark:text-emerald-400" : ""}`}>
         {extra ? "+" : "−"}{cop(e.amount)}

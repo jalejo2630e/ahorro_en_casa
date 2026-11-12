@@ -8,6 +8,7 @@ import {
 } from "@/lib/finance";
 import { cop } from "@/lib/format";
 import { FREQUENCY_LABEL, incomeOccurrences, type Frequency } from "@/lib/income";
+import { requireUser } from "@/lib/auth";
 
 export type FormState = { ok: boolean; message: string } | null;
 
@@ -29,15 +30,17 @@ const optAmount = z
 const refresh = () => revalidatePath("/", "layout");
 
 export async function markPaidAction(formData: FormData): Promise<void> {
+  const user = await requireUser();
   const parsed = z
     .object({ scheduleId: z.coerce.number().int().positive(), month: monthSchema, amount: optAmount })
     .safeParse(Object.fromEntries(formData));
   if (!parsed.success) throw new Error("Datos inválidos");
-  markPaid(parsed.data.scheduleId, parsed.data.month, toISO(new Date()), "web", parsed.data.amount);
+  markPaid(parsed.data.scheduleId, parsed.data.month, toISO(new Date()), "web", parsed.data.amount, user.id);
   refresh();
 }
 
 export async function addExpenseAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const user = await requireUser();
   const parsed = z
     .object({
       concept: z.string().trim().min(1, "Escribe un concepto").max(120),
@@ -53,6 +56,7 @@ export async function addExpenseAction(_prev: FormState, formData: FormData): Pr
     amount: d.amount,
     category: d.category || undefined,
     date: d.date || toISO(new Date()),
+    userId: user.id,
   });
   refresh();
   return { ok: true, message: "Gasto registrado" };
@@ -60,6 +64,7 @@ export async function addExpenseAction(_prev: FormState, formData: FormData): Pr
 
 /** Dinero extra (regalo, devolución…): suma al presupuesto de gastos diarios. */
 export async function addExtraAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const user = await requireUser();
   const parsed = z
     .object({
       concept: z.string().trim().min(1, "Escribe de dónde viene").max(120),
@@ -69,12 +74,13 @@ export async function addExtraAction(_prev: FormState, formData: FormData): Prom
     .safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { ok: false, message: parsed.error.issues[0].message };
   const d = parsed.data;
-  addExtraIncome({ concept: d.concept, amount: d.amount, date: d.date || toISO(new Date()) });
+  addExtraIncome({ concept: d.concept, amount: d.amount, date: d.date || toISO(new Date()), userId: user.id });
   refresh();
   return { ok: true, message: `Sumaste ${cop(d.amount)} a tu disponible` };
 }
 
 export async function deleteExpenseAction(formData: FormData): Promise<void> {
+  await requireUser();
   const parsed = z.object({ id: z.coerce.number().int().positive() }).safeParse(Object.fromEntries(formData));
   if (!parsed.success) throw new Error("Datos inválidos");
   deleteExpense(parsed.data.id); // solo gastos diarios y dinero extra; nunca pagos obligatorios ni sueldos
@@ -90,6 +96,7 @@ const optInt = (min: number, max: number) =>
     .pipe(z.number().int().min(min).max(max).optional());
 
 export async function addIncomeAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const user = await requireUser();
   const parsed = z
     .object({
       concept: z.string().trim().min(1, "Escribe un concepto").max(120),
@@ -108,7 +115,7 @@ export async function addIncomeAction(_prev: FormState, formData: FormData): Pro
 
   // Una sola vez: es plata ya recibida
   if (d.frequency === "unica") {
-    const r = addIncome({ concept: d.concept, amount: d.amount, savePercent: d.savePercent, date: d.date || today });
+    const r = addIncome({ concept: d.concept, amount: d.amount, savePercent: d.savePercent, date: d.date || today, userId: user.id });
     refresh();
     return {
       ok: true,
@@ -135,6 +142,7 @@ export async function addIncomeAction(_prev: FormState, formData: FormData): Pro
 }
 
 export async function markIncomeReceivedAction(formData: FormData): Promise<void> {
+  const user = await requireUser();
   const parsed = z
     .object({
       scheduleId: z.coerce.number().int().positive(),
@@ -143,12 +151,13 @@ export async function markIncomeReceivedAction(formData: FormData): Promise<void
     })
     .safeParse(Object.fromEntries(formData));
   if (!parsed.success) throw new Error("Datos inválidos");
-  markIncomeReceived(parsed.data.scheduleId, parsed.data.key, toISO(new Date()), "web", parsed.data.amount);
+  markIncomeReceived(parsed.data.scheduleId, parsed.data.key, toISO(new Date()), "web", parsed.data.amount, user.id);
   refresh();
 }
 
 /** Primer mes que llevas en la app; los anteriores no cuentan pagos ni ingresos. */
 export async function setStartMonthAction(formData: FormData): Promise<void> {
+  await requireUser();
   const parsed = z.object({ month: monthSchema }).safeParse(Object.fromEntries(formData));
   if (!parsed.success) throw new Error("Mes inválido (usa AAAA-MM)");
   setStartMonth(parsed.data.month);
@@ -156,6 +165,7 @@ export async function setStartMonthAction(formData: FormData): Promise<void> {
 }
 
 export async function unmarkPaidAction(formData: FormData): Promise<void> {
+  await requireUser();
   const parsed = z
     .object({ scheduleId: z.coerce.number().int().positive(), month: monthSchema })
     .safeParse(Object.fromEntries(formData));
@@ -165,6 +175,7 @@ export async function unmarkPaidAction(formData: FormData): Promise<void> {
 }
 
 export async function unmarkIncomeReceivedAction(formData: FormData): Promise<void> {
+  await requireUser();
   const parsed = z
     .object({ scheduleId: z.coerce.number().int().positive(), key: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) })
     .safeParse(Object.fromEntries(formData));
@@ -175,6 +186,7 @@ export async function unmarkIncomeReceivedAction(formData: FormData): Promise<vo
 
 /** Quita un ingreso registrado a mano. Los marcados desde "Pagos esperados" se deshacen con su propio botón. */
 export async function deleteIncomeEntryAction(formData: FormData): Promise<void> {
+  await requireUser();
   const parsed = z.object({ id: z.coerce.number().int().positive() }).safeParse(Object.fromEntries(formData));
   if (!parsed.success) throw new Error("Datos inválidos");
   deleteIncomeEntry(parsed.data.id);
@@ -182,6 +194,7 @@ export async function deleteIncomeEntryAction(formData: FormData): Promise<void>
 }
 
 export async function deactivateIncomeAction(formData: FormData): Promise<void> {
+  await requireUser();
   const parsed = z.object({ id: z.coerce.number().int().positive() }).safeParse(Object.fromEntries(formData));
   if (!parsed.success) throw new Error("Datos inválidos");
   deactivateIncomePlan(parsed.data.id);

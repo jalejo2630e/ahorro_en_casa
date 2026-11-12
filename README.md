@@ -50,6 +50,21 @@ Herramientas que escriben (solo agregan o marcan; **ninguna borra ni deshace** �
 `registrar_gasto`, `registrar_dinero_extra`, `marcar_pago_pagado` y `marcar_ingreso_recibido` (las dos últimas aceptan el monto real).
 Todo lo registrado por MCP queda con origen `mcp`.
 
+## Acceso y usuarios
+
+La app pide usuario y PIN de 6 dígitos. Todos los usuarios comparten las mismas finanzas del hogar; cada movimiento
+queda con el nombre de quien lo registró (los del asistente MCP aparecen como "Asistente").
+
+- **Primer uso:** abre `http://localhost:3000/setup` **desde la PC donde corre la app** y crea al administrador. Desde otra
+  dirección (p. ej. el celular) la pantalla se niega: así nadie de tu red se adueña de la app antes que tú.
+- **Más usuarios:** solo el administrador, en la pestaña **Cuenta** (crear, desactivar, restablecer PIN). No hay registro abierto.
+- **Seguridad:** el PIN se guarda solo como hash (scrypt); la sesión es una cookie `HttpOnly` y en la base queda únicamente el
+  hash del token; tras 5 PIN incorrectos la cuenta se bloquea 15 minutos (el administrador puede desbloquearla restableciendo el PIN).
+  El `proxy` solo hace una revisión rápida de la cookie; la verificación real se hace en cada página y en cada Server Action.
+- **HTTPS:** si sirves la app por HTTPS (p. ej. con Tailscale), pon `COOKIE_SECURE=true` en `.env.local` para marcar la cookie como `Secure`.
+- El servidor MCP no usa este login: tiene su propio token y solo acepta conexiones desde localhost.
+- Límite conocido: el bloqueo es por usuario (no por IP); alguien que conozca un usuario podría bloquearlo a propósito durante 15 min.
+
 ## Base de datos (SQLite en `data/`, no se sube a git)
 
 - `npm run db:push` crea o actualiza las tablas **con red de seguridad**: respalda antes, compara filas después y avisa si algo se perdió.

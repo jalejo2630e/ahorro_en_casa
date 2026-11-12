@@ -10,6 +10,7 @@ import {
   toISO,
   upcomingPayments,
 } from "@/lib/finance";
+import { requireUser } from "@/lib/auth";
 
 const card = "rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900";
 
@@ -26,6 +27,7 @@ export default function Home({ searchParams }: PageProps<"/">) {
 async function Dashboard({ searchParams }: { searchParams: PageProps<"/">["searchParams"] }) {
   const sp = await searchParams;
   await connection(); // datos del día: se calculan en cada visita
+  await requireUser();
   const today = toISO(new Date());
   const month = parseMonth(sp.mes, today);
   const start = getStartMonth(today);

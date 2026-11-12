@@ -131,7 +131,7 @@ export function createMcpServer() {
         if (isBeforeStart(month, today)) return fail(`${month} es anterior a la fecha de inicio: no se llevan pagos en ese mes.`);
         const item = getPayments(month, today).find((p) => p.id === pago_id);
         if (!item) return fail(`No existe el pago ${pago_id} en ${month}. Consulta los ids con ver_pagos_proximos.`);
-        const r = markPaid(pago_id, month, today, "mcp", monto);
+        const r = markPaid(pago_id, month, today, "mcp", monto); // sin userId: queda como "Asistente"
         const after = getPayments(month, today).find((p) => p.id === pago_id)!;
         return ok({
           pago: item.name, mes: month, yaEstabaPagado: r.alreadyPaid,

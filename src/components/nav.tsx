@@ -9,10 +9,15 @@ const ITEMS = [
   { href: "/gastos", label: "Gastos", icon: "◉" },
   { href: "/ingresos", label: "Ingresos", icon: "⊕" },
   { href: "/anual", label: "Año", icon: "▤" },
+  { href: "/cuenta", label: "Cuenta", icon: "☺" },
 ];
+
+// Pantallas de acceso: sin menú
+const NO_NAV = new Set(["/login", "/setup"]);
 
 export function Nav() {
   const pathname = usePathname();
+  if (NO_NAV.has(pathname)) return null;
   return (
     <nav
       aria-label="Principal"

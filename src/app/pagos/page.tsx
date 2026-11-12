@@ -7,6 +7,7 @@ import { cop, monthLabel, shiftMonth } from "@/lib/format";
 import { BeforeStartNotice } from "@/components/before-start";
 import { MonthTabs } from "@/components/month-tabs";
 import { daysInMonth, getPayments, getStartMonth, monthOf, parseMonth, toISO } from "@/lib/finance";
+import { requireUser } from "@/lib/auth";
 
 export const metadata = { title: "Pagos obligatorios · Ahorro en casa" };
 
@@ -21,6 +22,7 @@ export default function PagosPage({ searchParams }: PageProps<"/pagos">) {
 async function Calendar({ searchParams }: { searchParams: PageProps<"/pagos">["searchParams"] }) {
   const sp = await searchParams;
   await connection();
+  await requireUser();
   const today = toISO(new Date());
   const month = parseMonth(sp.mes, today);
   const start = getStartMonth(today);
