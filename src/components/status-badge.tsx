@@ -9,11 +9,11 @@ const STYLE: Record<Semaphore, string> = {
 const ICON: Record<Semaphore, string> = { pagado: "✅", pendiente: "⏳", urgente: "⚠️" };
 
 // Color + icono + texto: el estado no depende solo del color.
-export function StatusBadge({ status }: { status: Semaphore }) {
+export function StatusBadge({ status, label }: { status: Semaphore; label?: string }) {
   return (
     <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold ${STYLE[status]}`}>
       <span aria-hidden>{ICON[status]}</span>
-      {STATUS_LABEL[status]}
+      {label ?? STATUS_LABEL[status]}
     </span>
   );
 }

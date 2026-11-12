@@ -7,9 +7,10 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "db:push": "drizzle-kit push",
+    "db:push": "tsx src/db/safe-push.ts",
     "db:seed": "tsx src/db/seed.ts",
-    "db:import": "tsx src/db/import.ts"
+    "db:import": "tsx src/db/import.ts",
+    "db:backup": "tsx src/db/backup.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.2",

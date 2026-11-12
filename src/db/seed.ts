@@ -33,9 +33,9 @@ db.insert(paymentSchedule).values([
 ]).run();
 
 db.insert(incomeSchedule).values([
-  { name: "Pago quincena 1", amount: 1500000, dayOfMonth: 20, savePercent: 0 },
-  { name: "Pago principal", amount: 3500000, dayOfMonth: 30, savePercent: 30 },
-  { name: "Ingreso dominical", amount: 200000, weekday: 0, savePercent: 0 },
+  { name: "Pago quincena 1", amount: 1500000, frequency: "mensual", dayOfMonth: 20, savePercent: 0 },
+  { name: "Pago principal", amount: 3500000, frequency: "mensual", dayOfMonth: 30, savePercent: 30 },
+  { name: "Ingreso dominical", amount: 200000, frequency: "semanal", weekday: 0, savePercent: 0 },
 ]).run();
 
 db.insert(pockets).values([

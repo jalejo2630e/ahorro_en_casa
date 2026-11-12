@@ -1,34 +1,21 @@
-import { and, eq, like, sql } from "drizzle-orm";
+import { and, eq, isNull, like, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
-  categories, paymentSchedule, paymentStatus, pockets, savingsGoals, transactions,
+  categories, incomeReceipts, incomeSchedule, paymentSchedule, paymentStatus, pockets, savingsGoals,
+  transactions,
 } from "@/db/schema";
+import { daysBetween, daysInMonth, dueDate, monthOf } from "./dates";
+import { incomeOccurrences, type IncomeRule } from "./income";
+
+export type IncomeStatus = "recibido" | "pendiente" | "atrasado";
 
 export type Semaphore = "pagado" | "pendiente" | "urgente";
 export type Medal = "oro" | "plata" | "bronce" | "ninguna";
 
 const URGENT_DAYS = 3;
 
-// ---------- Fechas (sin zona horaria: todo en YYYY-MM-DD local) ----------
-export function toISO(d: Date): string {
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
-}
-export const monthOf = (iso: string) => iso.slice(0, 7);
-export function daysInMonth(month: string): number {
-  const [y, m] = month.split("-").map(Number);
-  return new Date(y, m, 0).getDate();
-}
-/** Un día 30 en febrero cae el último día del mes. */
-export function dueDate(month: string, dayOfMonth: number): string {
-  const day = Math.min(dayOfMonth, daysInMonth(month));
-  return `${month}-${String(day).padStart(2, "0")}`;
-}
-export function daysBetween(fromISO: string, toISOStr: string): number {
-  const a = Date.parse(fromISO + "T00:00:00Z");
-  const b = Date.parse(toISOStr + "T00:00:00Z");
-  return Math.round((b - a) / 86_400_000);
-}
+// Fechas puras: viven en ./dates (también las usa el cliente); se re-exportan por comodidad.
+export { toISO, monthOf, daysInMonth, dueDate, daysBetween, weekdayOf } from "./dates";
 
 // ---------- Reglas puras (fáciles de probar) ----------
 export function semaphore(paid: boolean, due: string, today: string): Semaphore {
@@ -138,40 +125,287 @@ export function addExpense(
   });
 }
 
-/** Registra un ingreso y aparta automáticamente savePercent % al ahorro intocable. */
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+function applyIncome(
+  tx: Tx,
+  input: { concept: string; amount: number; date: string; savePercent?: number; extra?: boolean },
+  source: "web" | "mcp",
+) {
+  if (!Number.isInteger(input.amount) || input.amount <= 0) throw new Error("Monto inválido");
+  // El dinero extra (regalos) va completo al presupuesto diario: nunca se aparta para ahorro
+  const pct = input.extra ? 0 : Math.min(Math.max(input.savePercent ?? 0, 0), 100);
+  const saved = Math.round((input.amount * pct) / 100);
+  const spendable = input.amount - saved;
+  const t = tx.insert(transactions).values({
+    type: "ingreso", concept: input.concept, amount: input.amount, saved, extra: input.extra ? 1 : 0,
+    pocketId: pocketId("Gastos del mes"), date: input.date, source,
+  }).returning().get();
+  adjustPocket(pocketId("Gastos del mes"), spendable);
+  adjustPocket(pocketId("Ahorro intocable"), saved);
+  return { transaction: t, saved, spendable };
+}
+
+/** Registra un ingreso recibido y aparta automáticamente savePercent % al ahorro intocable. */
 export function addIncome(
   input: { concept: string; amount: number; date: string; savePercent?: number },
   source: "web" | "mcp" = "web",
 ) {
+  return db.transaction((tx) => applyIncome(tx, input, source));
+}
+
+/** Dinero extra (regalo, devolución…): suma al presupuesto de gastos diarios, no cuenta como ingreso del mes. */
+export function addExtraIncome(
+  input: { concept: string; amount: number; date: string },
+  source: "web" | "mcp" = "web",
+) {
+  return db.transaction((tx) => applyIncome(tx, { ...input, extra: true }, source).transaction);
+}
+
+// ---------- Ingresos programados (diario / semanal / quincenal / mensual) ----------
+const ruleOf = (p: typeof incomeSchedule.$inferSelect): IncomeRule => ({
+  frequency: p.frequency,
+  dayOfMonth: p.dayOfMonth,
+  secondDayOfMonth: p.secondDayOfMonth,
+  weekday: p.weekday,
+});
+
+export function listIncomePlans() {
+  return db.select().from(incomeSchedule).where(eq(incomeSchedule.active, true)).all()
+    .map((p) => ({ ...p, rule: ruleOf(p) }));
+}
+
+export function addIncomePlan(input: {
+  name: string; amount: number; frequency: IncomeRule["frequency"];
+  dayOfMonth?: number; secondDayOfMonth?: number; weekday?: number; savePercent?: number;
+}) {
   if (!Number.isInteger(input.amount) || input.amount <= 0) throw new Error("Monto inválido");
-  const pct = Math.min(Math.max(input.savePercent ?? 0, 0), 100);
+  return db.insert(incomeSchedule).values({
+    name: input.name, amount: input.amount, frequency: input.frequency,
+    dayOfMonth: input.dayOfMonth ?? null, secondDayOfMonth: input.secondDayOfMonth ?? null,
+    weekday: input.frequency === "semanal" ? (input.weekday ?? 0) : null,
+    savePercent: Math.min(Math.max(input.savePercent ?? 0, 0), 100),
+  }).returning().get();
+}
+
+/** Se desactiva en vez de borrar: conserva el historial de lo ya recibido. */
+export function deactivateIncomePlan(id: number) {
+  db.update(incomeSchedule).set({ active: false }).where(eq(incomeSchedule.id, id)).run();
+}
+
+/** Total esperado del mes: monto por pago × cantidad de pagos que caen en ese mes. */
+export function expectedIncome(month: string): number {
+  return listIncomePlans().reduce((a, p) => a + p.amount * incomeOccurrences(p.rule, month).length, 0);
+}
+
+export function getIncomePlan(month: string, today: string) {
+  const plans = listIncomePlans();
+  const got = new Set(
+    db.select().from(incomeReceipts).where(like(incomeReceipts.occurrence, `${month}-%`)).all()
+      .map((r) => `${r.scheduleId}|${r.occurrence}`),
+  );
+  return plans
+    .flatMap((p) =>
+      incomeOccurrences(p.rule, month).map((o) => {
+        const received = got.has(`${p.id}|${o.key}`);
+        const late = !received && (o.date ? o.date < today : month < monthOf(today));
+        const status: IncomeStatus = received ? "recibido" : late ? "atrasado" : "pendiente";
+        return { scheduleId: p.id, name: p.name, amount: p.amount, savePercent: p.savePercent, key: o.key, date: o.date, status };
+      }),
+    )
+    .sort((a, b) => (a.date ?? `${month}-99`).localeCompare(b.date ?? `${month}-99`) || a.name.localeCompare(b.name));
+}
+
+/** Marca una ocurrencia esperada como recibida: crea el ingreso y aparta el % de ahorro. Idempotente. */
+export function markIncomeReceived(scheduleId: number, key: string, receivedOn: string, source: "web" | "mcp" = "web") {
   return db.transaction((tx) => {
-    const saved = Math.round((input.amount * pct) / 100);
-    const spendable = input.amount - saved;
-    const t = tx.insert(transactions).values({
-      type: "ingreso", concept: input.concept, amount: input.amount, saved,
-      pocketId: pocketId("Gastos del mes"), date: input.date, source,
-    }).returning().get();
-    adjustPocket(pocketId("Gastos del mes"), spendable);
-    adjustPocket(pocketId("Ahorro intocable"), saved);
-    return { transaction: t, saved, spendable };
+    const plan = tx.select().from(incomeSchedule).where(eq(incomeSchedule.id, scheduleId)).get();
+    if (!plan) throw new Error("Ingreso no encontrado");
+    if (!incomeOccurrences(ruleOf(plan), key.slice(0, 7)).some((o) => o.key === key)) {
+      throw new Error("Esa fecha no corresponde a este ingreso");
+    }
+    const existing = tx.select().from(incomeReceipts)
+      .where(and(eq(incomeReceipts.scheduleId, scheduleId), eq(incomeReceipts.occurrence, key))).get();
+    if (existing) return { alreadyReceived: true as const };
+
+    const r = applyIncome(tx, { concept: plan.name, amount: plan.amount, date: receivedOn, savePercent: plan.savePercent }, source);
+    tx.insert(incomeReceipts).values({ scheduleId, occurrence: key, transactionId: r.transaction.id }).run();
+    return { alreadyReceived: false as const, saved: r.saved };
   });
+}
+
+// ---------- Gastos diarios (los que NO son pagos obligatorios) ----------
+export function getDailyExpenses(month: string) {
+  return db
+    .select({
+      id: transactions.id, concept: transactions.concept, amount: transactions.amount,
+      date: transactions.date, category: categories.name, color: categories.color, source: transactions.source,
+    })
+    .from(transactions)
+    .leftJoin(categories, eq(categories.id, transactions.categoryId))
+    .where(and(eq(transactions.type, "gasto"), isNull(transactions.scheduleId), like(transactions.date, `${month}-%`)))
+    .orderBy(sql`${transactions.date} desc`, sql`${transactions.id} desc`)
+    .all();
+}
+
+export type DailyEntry = {
+  id: number; kind: "gasto" | "extra"; concept: string; amount: number; date: string;
+  category: string | null; color: string | null;
+};
+
+/** Movimientos del día a día: gastos diarios y dinero extra recibido (más recientes primero). */
+export function getDailyEntries(month: string): DailyEntry[] {
+  return db
+    .select({
+      id: transactions.id, type: transactions.type, concept: transactions.concept, amount: transactions.amount,
+      date: transactions.date, category: categories.name, color: categories.color,
+    })
+    .from(transactions)
+    .leftJoin(categories, eq(categories.id, transactions.categoryId))
+    .where(and(
+      like(transactions.date, `${month}-%`),
+      or(
+        and(eq(transactions.type, "gasto"), isNull(transactions.scheduleId)),
+        and(eq(transactions.type, "ingreso"), eq(transactions.extra, 1)),
+      ),
+    ))
+    .orderBy(sql`${transactions.date} desc`, sql`${transactions.id} desc`)
+    .all()
+    .map(({ type, ...r }) => ({ ...r, kind: type === "gasto" ? ("gasto" as const) : ("extra" as const) }));
+}
+
+/** Borra un gasto diario o un dinero extra (nunca un pago obligatorio ni un ingreso planeado) y ajusta el bolsillo. */
+export function deleteExpense(id: number): boolean {
+  return db.transaction((tx) => {
+    const t = tx.select().from(transactions)
+      .where(and(
+        eq(transactions.id, id),
+        or(
+          and(eq(transactions.type, "gasto"), isNull(transactions.scheduleId)),
+          and(eq(transactions.type, "ingreso"), eq(transactions.extra, 1)),
+        ),
+      )).get();
+    if (!t) return false;
+    adjustPocket(t.pocketId, t.type === "gasto" ? t.amount : -t.amount);
+    tx.delete(transactions).where(eq(transactions.id, id)).run();
+    return true;
+  });
+}
+
+/** Lo asignado hasta el día `day` (1..dim). Se redondea sobre el acumulado, así no se pierde ni sobra un peso. */
+export function cumulativeAllowance(budget: number, day: number, dim: number): number {
+  return budget > 0 ? Math.round((budget * day) / dim) : 0;
+}
+
+export type LedgerDay = {
+  date: string;
+  allowance: number; // lo que el presupuesto asigna a este día
+  carried: number; // lo que venía de los días anteriores (negativo si te pasaste)
+  spent: number;
+  received: number; // dinero extra recibido
+  balance: number; // lo que puedes gastar al cierre del día = carried + allowance + received − spent
+  entries: DailyEntry[];
+};
+
+/**
+ * Libro diario con acumulación: cada día se asigna presupuesto/días del mes; lo que no gastas pasa al
+ * día siguiente, lo que te pasas se descuenta del siguiente, y el dinero extra suma. Solo hay filas
+ * hasta hoy (mes actual), todos los días (mes pasado) o ninguna (mes futuro).
+ */
+function buildLedger(month: string, today: string, budget: number): LedgerDay[] {
+  const dim = daysInMonth(month);
+  const cur = monthOf(today);
+  const lastDay = month < cur ? dim : month === cur ? Number(today.slice(8)) : 0;
+  const entries = getDailyEntries(month);
+
+  const days: LedgerDay[] = [];
+  let balance = 0;
+  for (let d = 1; d <= lastDay; d++) {
+    const date = `${month}-${String(d).padStart(2, "0")}`;
+    const dayEntries = entries.filter((e) => e.date === date);
+    const spent = dayEntries.filter((e) => e.kind === "gasto").reduce((a, e) => a + e.amount, 0);
+    const received = dayEntries.filter((e) => e.kind === "extra").reduce((a, e) => a + e.amount, 0);
+    const allowance = cumulativeAllowance(budget, d, dim) - cumulativeAllowance(budget, d - 1, dim);
+    const carried = balance;
+    balance = carried + allowance + received - spent;
+    days.push({ date, allowance, carried, spent, received, balance, entries: dayEntries });
+  }
+  return days;
+}
+
+export function getDailyLedger(month: string, today: string): LedgerDay[] {
+  const s = getSummary(month, today);
+  return buildLedger(month, today, s.incomeBase - s.obligationsTotal - getSavingsGoal(month).monthlyTarget);
+}
+
+/**
+ * Presupuesto para gastos diarios = ingresos − pagos obligatorios − meta de ahorro (+ dinero extra recibido).
+ * `availableToday` es lo que puedes gastar hoy sin tocar el ahorro: asignación acumulada − lo gastado + extras.
+ */
+export function getBudget(month: string, today: string) {
+  const s = getSummary(month, today);
+  const goal = getSavingsGoal(month);
+  const budget = s.incomeBase - s.obligationsTotal - goal.monthlyTarget;
+  const ledger = buildLedger(month, today, budget);
+  const last = ledger.at(-1);
+
+  const cur = monthOf(today);
+  const dim = daysInMonth(month);
+  const elapsed = ledger.length;
+  const daysLeft = month < cur ? 0 : month === cur ? dim - elapsed + 1 : dim; // hoy cuenta
+  const spent = s.dailyExpenses;
+  const extra = s.extraReceived;
+  const pool = budget + extra; // todo lo que puedes gastar en el mes sin tocar el ahorro
+
+  return {
+    month, budget, extra, pool, spent,
+    remaining: pool - spent,
+    usedPct: pool > 0 ? spent / pool : spent > 0 ? 1 : 0,
+    elapsedPct: elapsed / dim,
+    daysLeft,
+    dailyAllowance: budget > 0 ? Math.round(budget / dim) : 0, // referencia: asignación diaria base
+    availableToday: last?.balance ?? 0,
+    carried: last?.carried ?? 0, // lo que venía de ayer
+    todayAllowance: last?.allowance ?? 0,
+    averagePerDay: elapsed > 0 ? Math.round(spent / elapsed) : 0,
+    eatingIntoSavings: spent > pool, // ya gastaste más de lo que el mes permitía
+    // Insumos del cálculo, para mostrarlos
+    incomeBase: s.incomeBase, obligationsTotal: s.obligationsTotal, savingsTarget: goal.monthlyTarget,
+  };
 }
 
 // ---------- Resumen y meta ----------
 export function getSummary(month: string, today: string) {
   const sums = db
     .select({ type: transactions.type, total: sql<number>`coalesce(sum(${transactions.amount}),0)` })
-    .from(transactions).where(like(transactions.date, `${month}-%`)).groupBy(transactions.type).all();
-  const income = sums.find((s) => s.type === "ingreso")?.total ?? 0;
-  const expenses = sums.find((s) => s.type === "gasto")?.total ?? 0;
-  const pendingObligations = getPayments(month, today)
-    .filter((p) => p.status !== "pagado").reduce((a, p) => a + p.amount, 0);
+    // El dinero extra (regalos) queda fuera: no es ingreso del mes, solo suma al presupuesto diario
+    .from(transactions).where(and(like(transactions.date, `${month}-%`), eq(transactions.extra, 0)))
+    .groupBy(transactions.type).all();
+  const extraReceived =
+    db.select({ t: sql<number>`coalesce(sum(${transactions.amount}),0)` }).from(transactions)
+      .where(and(eq(transactions.type, "ingreso"), eq(transactions.extra, 1), like(transactions.date, `${month}-%`)))
+      .get()?.t ?? 0;
+  const income = sums.find((s) => s.type === "ingreso")?.total ?? 0; // recibido
+  const expenses = sums.find((s) => s.type === "gasto")?.total ?? 0; // pagos + gastos diarios
+  const dailyExpenses =
+    db.select({ t: sql<number>`coalesce(sum(${transactions.amount}),0)` }).from(transactions)
+      .where(and(eq(transactions.type, "gasto"), isNull(transactions.scheduleId), like(transactions.date, `${month}-%`)))
+      .get()?.t ?? 0;
+  const payments = getPayments(month, today);
+  const pendingObligations = payments.filter((p) => p.status !== "pagado").reduce((a, p) => a + p.amount, 0);
+  const obligationsTotal = payments.reduce((a, p) => a + p.amount, 0);
+
+  // Si hay ingresos programados se usa lo esperado; si lo recibido es mayor, manda lo recibido.
+  const expected = expectedIncome(month);
+  const incomeBase = Math.max(income, expected);
+  const margin = incomeBase + extraReceived - expenses - pendingObligations; // lo realmente libre
 
   return {
-    month, income, expenses, pendingObligations,
-    savingsRate: income > 0 ? (income - expenses) / income : 0,
-    margin: income - expenses - pendingObligations, // lo realmente libre
+    month, income, extraReceived, expectedIncome: expected, incomeBase,
+    expenses, dailyExpenses, paidObligations: expenses - dailyExpenses,
+    obligationsTotal, pendingObligations,
+    savingsRate: incomeBase > 0 ? margin / incomeBase : 0,
+    margin,
   };
 }
 

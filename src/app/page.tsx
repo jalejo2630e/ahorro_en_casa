@@ -5,7 +5,7 @@ import { MonthTabs } from "@/components/month-tabs";
 import { PaymentRow } from "@/components/payment-row";
 import { cop, MEDAL_LABEL, monthLabel, pct } from "@/lib/format";
 import {
-  getExpensesByCategory, getPayments, getSavingsGoal, getSummary, monthOf, parseMonth, toISO,
+  getBudget, getExpensesByCategory, getPayments, getSavingsGoal, getSummary, monthOf, parseMonth, toISO,
   upcomingPayments,
 } from "@/lib/finance";
 
@@ -34,11 +34,19 @@ async function Dashboard({ searchParams }: { searchParams: PageProps<"/">["searc
     ? upcomingPayments(7, today)
     : getPayments(month, today).filter((p) => p.status !== "pagado").slice(0, 8);
 
+  const b = getBudget(month, today);
   const stats = [
-    { label: "Ingresos", value: cop(s.income) },
-    { label: "Gastos", value: cop(s.expenses) },
-    { label: "Tasa de ahorro", value: pct(s.savingsRate) },
-    { label: "Margen disponible", value: cop(s.margin), hint: "descontando lo pendiente", negative: s.margin < 0 },
+    { label: "Ingresos", value: cop(s.incomeBase), hint: `recibido ${cop(s.income)}`, href: `/ingresos?mes=${month}` },
+    { label: "Pagos obligatorios", value: cop(s.paidObligations), hint: `de ${cop(s.obligationsTotal)}`, href: `/pagos?mes=${month}` },
+    {
+      label: "Gastos diarios", value: cop(s.dailyExpenses), href: `/gastos?mes=${month}`,
+      hint: b.budget <= 0
+        ? "sin presupuesto"
+        : isCurrent
+          ? `hoy puedes gastar ${cop(b.availableToday)}`
+          : `${pct(b.usedPct)} del presupuesto`,
+    },
+    { label: "Margen disponible", value: cop(s.margin), hint: `tasa de ahorro ${pct(s.savingsRate)}`, negative: s.margin < 0 },
   ];
 
   return (
@@ -51,13 +59,20 @@ async function Dashboard({ searchParams }: { searchParams: PageProps<"/">["searc
       <MonthTabs path="/" month={month} todayMonth={monthOf(today)} />
 
       <section aria-label="Resumen" className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        {stats.map((x) => (
-          <div key={x.label} className={card}>
-            <p className="text-xs font-medium text-slate-500">{x.label}</p>
-            <p className={`mt-1 text-lg font-bold tabular-nums md:text-xl ${x.negative ? "text-red-600" : ""}`}>{x.value}</p>
-            {x.hint && <p className="text-[11px] text-slate-500">{x.hint}</p>}
-          </div>
-        ))}
+        {stats.map((x) => {
+          const body = (
+            <>
+              <p className="text-xs font-medium text-slate-500">{x.label}</p>
+              <p className={`mt-1 text-lg font-bold tabular-nums md:text-xl ${x.negative ? "text-red-600" : ""}`}>{x.value}</p>
+              {x.hint && <p className="text-[11px] text-slate-500">{x.hint}</p>}
+            </>
+          );
+          return x.href ? (
+            <Link key={x.label} href={x.href} className={`${card} block hover:border-emerald-500`}>{body}</Link>
+          ) : (
+            <div key={x.label} className={card}>{body}</div>
+          );
+        })}
       </section>
 
       <section className={card} aria-label="Reto de ahorro">
@@ -78,7 +93,7 @@ async function Dashboard({ searchParams }: { searchParams: PageProps<"/">["searc
         <section className={card} aria-label="Próximos pagos">
           <div className="flex items-center justify-between">
             <h2 className="font-semibold">{isCurrent ? "Próximos 7 días" : "Pendientes del mes"}</h2>
-            <Link href={`/calendario?mes=${month}`} className="text-sm font-medium text-emerald-600">Ver calendario</Link>
+            <Link href={`/pagos?mes=${month}`} className="text-sm font-medium text-emerald-600">Ver pagos</Link>
           </div>
           {next.length === 0 ? (
             <p className="py-6 text-center text-sm text-slate-500">{isCurrent ? "Nada pendiente esta semana 🎉" : "Nada pendiente este mes 🎉"}</p>

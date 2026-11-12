@@ -46,4 +46,12 @@ La app expone un servidor MCP en `http://localhost:3000/api/mcp` (HTTP, sin sesi
 
 Herramientas: `consultar_estado_financiero`, `registrar_gasto`, `ver_pagos_proximos`, `verificar_meta_ahorro`.
 
-Base de datos: `npm run db:push` crea las tablas y `npm run db:seed` carga datos de ejemplo.
+## Base de datos (SQLite en `data/`, no se sube a git)
+
+- `npm run db:push` crea o actualiza las tablas **con red de seguridad**: respalda antes, compara filas después y avisa si algo se perdió.
+- `npm run db:backup` hace un respaldo consistente en `data/backups/` (conserva los 20 últimos).
+- `npm run db:seed` carga datos de ejemplo; `npm run db:import` carga tus finanzas desde `data/finanzas.json`.
+
+**Cuidado con los cambios de esquema.** `drizzle-kit push` reconstruye una tabla SQLite (y puede perder filas) si el orden de
+columnas de `src/db/schema.ts` no coincide con la base. Reglas: (1) las columnas nuevas van **siempre al final** de la tabla;
+(2) en una base con datos reales, lo más seguro es un `ALTER TABLE ... ADD COLUMN` manual; (3) nunca uses `--force` sobre tus datos reales.

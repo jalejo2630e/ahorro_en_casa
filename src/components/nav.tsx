@@ -5,9 +5,10 @@ import { usePathname } from "next/navigation";
 
 const ITEMS = [
   { href: "/", label: "Inicio", icon: "◧" },
-  { href: "/calendario", label: "Calendario", icon: "▦" },
+  { href: "/pagos", label: "Pagos", icon: "▦" },
+  { href: "/gastos", label: "Gastos", icon: "◉" },
+  { href: "/ingresos", label: "Ingresos", icon: "⊕" },
   { href: "/anual", label: "Año", icon: "▤" },
-  { href: "/registrar", label: "Registrar", icon: "＋" },
 ];
 
 export function Nav() {

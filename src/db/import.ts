@@ -20,9 +20,11 @@ const schema = z.object({
     z.object({
       concepto: z.string().min(1),
       monto: z.number().int().positive(),
+      frecuencia: z.enum(["diario", "semanal", "quincenal", "mensual"]).optional(),
       dia_ingreso: z.number().int().min(1).max(31).optional(),
+      segundo_dia: z.number().int().min(1).max(31).optional(),
       dia_semana: z.enum(["domingo", "lunes", "martes", "miercoles", "jueves", "viernes", "sabado"]).optional(),
-    }).refine((i) => i.dia_ingreso || i.dia_semana, "Cada ingreso necesita dia_ingreso o dia_semana"),
+    }),
   ),
   egresos: z.array(
     z.object({
@@ -87,16 +89,24 @@ db.transaction((tx) => {
     }
   }
 
-  // Ingresos esperados (se reemplazan completos: no tienen historial propio)
-  tx.delete(incomeSchedule).run();
+  // Ingresos programados: actualizar por nombre o insertar; los que ya no están se desactivan
+  // (no se borran: pueden tener ingresos ya marcados como recibidos)
   for (const i of data.ingresos) {
-    tx.insert(incomeSchedule).values({
-      name: i.concepto, amount: i.monto,
-      dayOfMonth: i.dia_ingreso ?? null,
-      weekday: i.dia_semana ? WEEKDAYS.indexOf(i.dia_semana) : null,
-      savePercent: 0,
-    }).run();
+    // Si no viene "frecuencia": con dia_semana es semanal; en otro caso, mensual
+    const frequency = i.frecuencia ?? (i.dia_semana ? "semanal" : "mensual");
+    const values = {
+      name: i.concepto, amount: i.monto, frequency,
+      dayOfMonth: frequency === "semanal" || frequency === "diario" ? null : (i.dia_ingreso ?? null),
+      secondDayOfMonth: frequency === "quincenal" ? (i.segundo_dia ?? null) : null,
+      weekday: frequency === "semanal" ? WEEKDAYS.indexOf(i.dia_semana ?? "domingo") : null,
+      active: true,
+    };
+    const existing = tx.select().from(incomeSchedule).where(eq(incomeSchedule.name, i.concepto)).get();
+    if (existing) tx.update(incomeSchedule).set(values).where(eq(incomeSchedule.id, existing.id)).run();
+    else tx.insert(incomeSchedule).values({ ...values, savePercent: 0 }).run();
   }
+  tx.update(incomeSchedule).set({ active: false })
+    .where(notInArray(incomeSchedule.name, data.ingresos.map((i) => i.concepto))).run();
 
   // Meta de ahorro del año actual
   const year = new Date().getFullYear();

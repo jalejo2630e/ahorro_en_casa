@@ -7,17 +7,17 @@ import { cop, monthLabel, shiftMonth } from "@/lib/format";
 import { MonthTabs } from "@/components/month-tabs";
 import { daysInMonth, getPayments, monthOf, parseMonth, toISO } from "@/lib/finance";
 
-export const metadata = { title: "Calendario de pagos · Ahorro en casa" };
+export const metadata = { title: "Pagos obligatorios · Ahorro en casa" };
 
-export default function CalendarPage({ searchParams }: PageProps<"/calendario">) {
+export default function PagosPage({ searchParams }: PageProps<"/pagos">) {
   return (
-    <Suspense fallback={<p className="text-slate-500">Cargando calendario…</p>}>
+    <Suspense fallback={<p className="text-slate-500">Cargando pagos…</p>}>
       <Calendar searchParams={searchParams} />
     </Suspense>
   );
 }
 
-async function Calendar({ searchParams }: { searchParams: PageProps<"/calendario">["searchParams"] }) {
+async function Calendar({ searchParams }: { searchParams: PageProps<"/pagos">["searchParams"] }) {
   const sp = await searchParams;
   await connection();
   const today = toISO(new Date());
@@ -38,19 +38,19 @@ async function Calendar({ searchParams }: { searchParams: PageProps<"/calendario
     <div className="space-y-6">
       <header className="flex items-center justify-between gap-2">
         <div>
-          <h1 className="text-2xl font-bold">{monthLabel(month)}</h1>
+          <h1 className="text-2xl font-bold">Pagos de {monthLabel(month)}</h1>
           <p className="text-sm text-slate-500">
-            Pagado {cop(totals.paid)} de {cop(totals.total)}
+            Lo obligatorio · Pagado {cop(totals.paid)} de {cop(totals.total)}
           </p>
         </div>
         <div className="flex gap-1 text-sm font-medium">
-          <Link href={`/calendario?mes=${shiftMonth(month, -1)}`} aria-label="Mes anterior" className="rounded-lg border border-slate-300 px-3 py-1.5 dark:border-slate-700">←</Link>
-          <Link href="/calendario" className="rounded-lg border border-slate-300 px-3 py-1.5 dark:border-slate-700">Hoy</Link>
-          <Link href={`/calendario?mes=${shiftMonth(month, 1)}`} aria-label="Mes siguiente" className="rounded-lg border border-slate-300 px-3 py-1.5 dark:border-slate-700">→</Link>
+          <Link href={`/pagos?mes=${shiftMonth(month, -1)}`} aria-label="Mes anterior" className="rounded-lg border border-slate-300 px-3 py-1.5 dark:border-slate-700">←</Link>
+          <Link href="/pagos" className="rounded-lg border border-slate-300 px-3 py-1.5 dark:border-slate-700">Hoy</Link>
+          <Link href={`/pagos?mes=${shiftMonth(month, 1)}`} aria-label="Mes siguiente" className="rounded-lg border border-slate-300 px-3 py-1.5 dark:border-slate-700">→</Link>
         </div>
       </header>
 
-      <MonthTabs path="/calendario" month={month} todayMonth={monthOf(today)} />
+      <MonthTabs path="/pagos" month={month} todayMonth={monthOf(today)} />
 
       <section aria-label="Vista mensual" className="rounded-2xl border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
         <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-medium text-slate-500">

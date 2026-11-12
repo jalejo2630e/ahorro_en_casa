@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 // Todos los montos se guardan como enteros en pesos (COP), sin decimales.
 
@@ -25,6 +25,11 @@ export const transactions = sqliteTable("transactions", {
   scheduleId: integer("schedule_id"),
   source: text("source", { enum: ["web", "mcp"] }).notNull().default("web"),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  // IMPORTANTE: las columnas nuevas SIEMPRE van al final. drizzle-kit reconstruye la tabla (y
+  // puede perder filas) si el orden de columnas del esquema no coincide con el de la base.
+  // Dinero extra (regalos, etc.) que suma al presupuesto de gastos diarios; NO es ingreso planeado.
+  // 0 / 1 (entero simple, para que el DDL coincida con el ALTER TABLE).
+  extra: integer("extra").notNull().default(0),
 });
 
 // Bolsillos virtuales (ahorro intocable, arriendo blindado, etc.)
@@ -67,12 +72,32 @@ export const paymentStatus = sqliteTable("payment_status", {
   transactionId: integer("transaction_id"),
 });
 
-// Ingresos esperados fraccionados (días 20/21, 23/25, 30, domingos…)
+// Ingresos recurrentes. `amount` es lo que se recibe en CADA pago.
 export const incomeSchedule = sqliteTable("income_schedule", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   name: text("name").notNull(),
   amount: integer("amount").notNull(),
-  dayOfMonth: integer("day_of_month"), // null si es semanal
-  weekday: integer("weekday"), // 0 = domingo, para ingresos semanales
-  savePercent: integer("save_percent").notNull().default(0), // % que se aparta al entrar
+  frequency: text("frequency", { enum: ["diario", "semanal", "quincenal", "mensual"] })
+    .notNull()
+    .default("mensual"),
+  dayOfMonth: integer("day_of_month"), // mensual: día (vacío = sin día fijo); quincenal: primer día
+  secondDayOfMonth: integer("second_day_of_month"), // quincenal: segundo día
+  weekday: integer("weekday"), // semanal: 0 = domingo
+  savePercent: integer("save_percent").notNull().default(0), // % que se aparta al recibir
+  active: integer("active", { mode: "boolean" }).notNull().default(true),
 });
+
+// Cada ocurrencia esperada que ya se marcó como recibida.
+// `occurrence` es la fecha esperada (YYYY-MM-DD) o YYYY-MM-00 si el ingreso mensual no tiene día fijo.
+export const incomeReceipts = sqliteTable(
+  "income_receipts",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    scheduleId: integer("schedule_id")
+      .notNull()
+      .references(() => incomeSchedule.id),
+    occurrence: text("occurrence").notNull(),
+    transactionId: integer("transaction_id"),
+  },
+  (t) => [uniqueIndex("income_receipts_unique").on(t.scheduleId, t.occurrence)],
+);

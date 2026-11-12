@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import {
-  addExpense, getExpensesByCategory, getSavingsGoal, getSummary, listCategories,
+  addExpense, getBudget, getExpensesByCategory, getSavingsGoal, getSummary, listCategories,
   monthOf, toISO, upcomingPayments,
 } from "@/lib/finance";
 
@@ -25,14 +25,26 @@ export function createMcpServer() {
     {
       title: "Estado financiero del mes",
       description:
-        "Resumen del mes: ingresos, gastos, tasa de ahorro (0-1), obligaciones pendientes, margen libre y gastos por categoría. Montos en COP.",
+        "Resumen del mes: ingresos (esperado y recibido), pagos obligatorios, gastos diarios, tasa de ahorro (0-1), margen libre, presupuesto de gastos diarios y gastos por categoría. Montos en COP.",
       inputSchema: { mes: monthSchema.optional().describe("Mes YYYY-MM. Por defecto, el mes actual.") },
       annotations: { readOnlyHint: true },
     },
     async ({ mes }) => {
       const today = toISO(new Date());
       const month = mes ?? monthOf(today);
-      return ok({ ...getSummary(month, today), gastosPorCategoria: getExpensesByCategory(month) });
+      const b = getBudget(month, today);
+      return ok({
+        ...getSummary(month, today),
+        presupuestoGastosDiarios: {
+          presupuestoMes: b.budget, dineroExtraRecibido: b.extra, gastadoEnElMes: b.spent,
+          quedaEnElMes: b.remaining, porcentajeUsado: b.usedPct, diasRestantes: b.daysLeft,
+          asignacionDiariaBase: b.dailyAllowance,
+          // Lo que puede gastar HOY sin tocar el ahorro (acumula lo no gastado; negativo si se pasó)
+          disponibleHoy: b.availableToday, veniaDeDiasAnteriores: b.carried,
+          gastandoDelAhorro: b.eatingIntoSavings,
+        },
+        gastosPorCategoria: getExpensesByCategory(month),
+      });
     },
   );
 
@@ -41,7 +53,7 @@ export function createMcpServer() {
     {
       title: "Registrar un gasto",
       description:
-        "Registra un gasto y lo descuenta del bolsillo 'Gastos del mes'. El monto es un entero positivo en COP.",
+        "Registra un gasto DIARIO (no un pago obligatorio) y lo descuenta del bolsillo 'Gastos del mes'. El monto es un entero positivo en COP.",
       inputSchema: {
         concepto: z.string().trim().min(1).max(120),
         monto: z.number().int().positive().describe("Monto en COP, sin decimales"),
