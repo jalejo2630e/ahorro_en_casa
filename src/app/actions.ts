@@ -19,14 +19,21 @@ const amountSchema = z
   .transform((s) => Number(s.replace(/\D/g, "")))
   .pipe(z.number().int().positive("El monto debe ser mayor a cero"));
 
+// Monto opcional al marcar: vacío = el programado; si lo escribes, es lo realmente pagado/recibido
+const optAmount = z
+  .string()
+  .optional()
+  .transform((s) => (s && s.trim() !== "" ? Number(s.replace(/\D/g, "")) : undefined))
+  .pipe(z.number().int().positive().optional());
+
 const refresh = () => revalidatePath("/", "layout");
 
 export async function markPaidAction(formData: FormData): Promise<void> {
   const parsed = z
-    .object({ scheduleId: z.coerce.number().int().positive(), month: monthSchema })
+    .object({ scheduleId: z.coerce.number().int().positive(), month: monthSchema, amount: optAmount })
     .safeParse(Object.fromEntries(formData));
   if (!parsed.success) throw new Error("Datos inválidos");
-  markPaid(parsed.data.scheduleId, parsed.data.month, toISO(new Date()));
+  markPaid(parsed.data.scheduleId, parsed.data.month, toISO(new Date()), "web", parsed.data.amount);
   refresh();
 }
 
@@ -132,12 +139,7 @@ export async function markIncomeReceivedAction(formData: FormData): Promise<void
     .object({
       scheduleId: z.coerce.number().int().positive(),
       key: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-      // Vacío = el monto programado; si lo escribes, es lo que realmente recibiste
-      amount: z
-        .string()
-        .optional()
-        .transform((s) => (s && s.trim() !== "" ? Number(s.replace(/\D/g, "")) : undefined))
-        .pipe(z.number().int().positive().optional()),
+      amount: optAmount,
     })
     .safeParse(Object.fromEntries(formData));
   if (!parsed.success) throw new Error("Datos inválidos");

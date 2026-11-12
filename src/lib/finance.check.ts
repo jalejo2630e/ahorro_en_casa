@@ -193,6 +193,28 @@ assert.equal(f.getSummary("2026-12", today).income, decBefore);
 f.markIncomeReceived(sun.scheduleId, sun.key, today);
 assert.equal(f.getSummary("2026-12", today).income, decBefore + 200_000);
 f.unmarkIncomeReceived(sun.scheduleId, sun.key);
+
+// ---- Pagar un monto distinto al programado (la luz llegó más cara)
+const addi = f.getPayments("2026-12", today).find((p) => p.name === "Addi")!;
+assert.equal(addi.amount, 150_000); // programado
+const sum0 = f.getSummary("2026-12", today);
+assert.throws(() => f.markPaid(addi.id, "2026-12", today, "web", 0));
+f.markPaid(addi.id, "2026-12", today, "web", 180_000);
+const addiPaid = f.getPayments("2026-12", today).find((p) => p.name === "Addi")!;
+assert.equal(addiPaid.status, "pagado");
+assert.equal(addiPaid.amount, 150_000); // el programado no cambia
+assert.equal(addiPaid.effectiveAmount, 180_000); // lo realmente pagado
+const sum1 = f.getSummary("2026-12", today);
+assert.equal(sum1.expenses, sum0.expenses + 180_000);
+assert.equal(sum1.obligationsTotal, sum0.obligationsTotal + 30_000); // el total refleja lo real
+assert.equal(sum1.pendingObligations, sum0.pendingObligations - 150_000); // lo pendiente baja lo programado
+assert.equal(f.getBudget("2026-12", today).budget, f.getBudget("2026-12", today).incomeBase - sum1.obligationsTotal - 1_000_000);
+assert.equal(f.getBudget("2026-12", today).budget, 2_985_000 - 30_000); // pagar de más reduce el presupuesto diario
+// deshacer vuelve a lo programado
+assert.equal(f.unmarkPaid(addi.id, "2026-12"), true);
+const sum2 = f.getSummary("2026-12", today);
+assert.equal(sum2.obligationsTotal, sum0.obligationsTotal);
+assert.equal(sum2.expenses, sum0.expenses);
 console.log("finance OK", s);
 }
 main();

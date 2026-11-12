@@ -25,8 +25,8 @@ async function Calendar({ searchParams }: { searchParams: PageProps<"/pagos">["s
 
   const payments = getPayments(month, today);
   const totals = {
-    total: payments.reduce((a, p) => a + p.amount, 0),
-    paid: payments.filter((p) => p.status === "pagado").reduce((a, p) => a + p.amount, 0),
+    total: payments.reduce((a, p) => a + p.effectiveAmount, 0),
+    paid: payments.filter((p) => p.status === "pagado").reduce((a, p) => a + p.effectiveAmount, 0),
   };
 
   // Rejilla: semana empieza en lunes

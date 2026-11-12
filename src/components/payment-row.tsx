@@ -28,7 +28,10 @@ export function PaymentRow({ p, month }: { p: Payment; month: string }) {
         {p.fundingSource && <p className="truncate text-xs text-slate-400">Se paga con: {p.fundingSource}</p>}
       </div>
       <div className="flex flex-col items-end gap-1.5">
-        <p className="font-semibold tabular-nums">{cop(p.amount)}</p>
+        <p className="font-semibold tabular-nums">{cop(p.effectiveAmount)}</p>
+        {p.status === "pagado" && p.effectiveAmount !== p.amount && (
+          <p className="-mt-1 text-[11px] text-slate-500">programado {cop(p.amount)}</p>
+        )}
         {p.status === "pagado" ? (
           <form action={unmarkPaidAction} className="flex items-center gap-2">
             <StatusBadge status="pagado" />
@@ -46,6 +49,13 @@ export function PaymentRow({ p, month }: { p: Payment; month: string }) {
             <StatusBadge status={p.status} />
             <input type="hidden" name="scheduleId" value={p.id} />
             <input type="hidden" name="month" value={month} />
+            <input
+              name="amount"
+              inputMode="numeric"
+              placeholder={p.amount.toLocaleString("es-CO")}
+              aria-label={`Monto pagado de ${p.name} (vacío = ${cop(p.amount)})`}
+              className="w-24 rounded-md border border-slate-300 bg-white px-2 py-1 text-right text-xs tabular-nums dark:border-slate-700 dark:bg-slate-900"
+            />
             <button
               type="submit"
               className="rounded-md bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-emerald-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600"

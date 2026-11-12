@@ -43,6 +43,7 @@ export function getPayments(month: string, today: string) {
       fundingSource: paymentSchedule.fundingSource,
       category: categories.name,
       paidAt: paymentStatus.paidAt,
+      paidAmount: transactions.amount, // lo que realmente se pagó (puede diferir del programado)
     })
     .from(paymentSchedule)
     .leftJoin(categories, eq(categories.id, paymentSchedule.categoryId))
@@ -50,6 +51,7 @@ export function getPayments(month: string, today: string) {
       paymentStatus,
       and(eq(paymentStatus.scheduleId, paymentSchedule.id), eq(paymentStatus.month, month)),
     )
+    .leftJoin(transactions, eq(transactions.id, paymentStatus.transactionId))
     .where(eq(paymentSchedule.active, true))
     .all();
 
@@ -58,6 +60,8 @@ export function getPayments(month: string, today: string) {
       const due = dueDate(month, r.dayOfMonth);
       return {
         ...r,
+        // Pagado: lo realmente pagado; sin pagar: lo programado
+        effectiveAmount: r.paidAt && r.paidAmount != null ? r.paidAmount : r.amount,
         due,
         status: semaphore(!!r.paidAt, due, today),
         daysLeft: daysBetween(today, due),
@@ -82,7 +86,11 @@ function adjustPocket(id: number | null, delta: number) {
 }
 
 /** Marca una obligación como pagada: crea el gasto y descuenta del bolsillo. Idempotente. */
-export function markPaid(scheduleId: number, month: string, paidOn: string, source: "web" | "mcp" = "web") {
+export function markPaid(
+  scheduleId: number, month: string, paidOn: string, source: "web" | "mcp" = "web",
+  amount?: number, // monto realmente pagado; si falta, el programado
+) {
+  if (amount !== undefined && (!Number.isInteger(amount) || amount <= 0)) throw new Error("Monto inválido");
   return db.transaction((tx) => {
     const item = tx.select().from(paymentSchedule).where(eq(paymentSchedule.id, scheduleId)).get();
     if (!item) throw new Error("Obligación no encontrada");
@@ -93,12 +101,13 @@ export function markPaid(scheduleId: number, month: string, paidOn: string, sour
 
     // El pago pertenece al mes que se está marcando: se fecha dentro de ese mes, no con la fecha de hoy
     const date = dateWithinMonth(month, dueDate(month, item.dayOfMonth), paidOn);
+    const paid = amount ?? item.amount;
     const pid = pocketId("Gastos del mes");
     const t = tx.insert(transactions).values({
-      type: "gasto", concept: item.name, amount: item.amount, categoryId: item.categoryId,
+      type: "gasto", concept: item.name, amount: paid, categoryId: item.categoryId,
       pocketId: pid, date, scheduleId, source,
     }).returning().get();
-    adjustPocket(pid, -item.amount);
+    adjustPocket(pid, -paid);
     if (existing) {
       tx.update(paymentStatus).set({ paidAt: date, transactionId: t.id }).where(eq(paymentStatus.id, existing.id)).run();
     } else {
@@ -481,7 +490,7 @@ export function getSummary(month: string, today: string) {
       .get()?.t ?? 0;
   const payments = getPayments(month, today);
   const pendingObligations = payments.filter((p) => p.status !== "pagado").reduce((a, p) => a + p.amount, 0);
-  const obligationsTotal = payments.reduce((a, p) => a + p.amount, 0);
+  const obligationsTotal = payments.reduce((a, p) => a + p.effectiveAmount, 0); // pagado real + pendiente programado
 
   // Si hay ingresos programados se usa lo esperado; si lo recibido es mayor, manda lo recibido.
   const expected = expectedIncome(month);
@@ -545,7 +554,7 @@ export function getYearOverview(year: number, today: string) {
     const month = `${year}-${String(i + 1).padStart(2, "0")}`;
     const payments = getPayments(month, today);
     const sum = (f: (p: (typeof payments)[number]) => boolean) =>
-      payments.filter(f).reduce((a, p) => a + p.amount, 0);
+      payments.filter(f).reduce((a, p) => a + p.effectiveAmount, 0);
     const s = getSummary(month, today);
     const g = getSavingsGoal(month);
     return {
