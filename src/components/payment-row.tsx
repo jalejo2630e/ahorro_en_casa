@@ -1,6 +1,7 @@
 import { markPaidAction, unmarkPaidAction } from "@/app/actions";
 import { cop } from "@/lib/format";
 import type { getPayments } from "@/lib/finance";
+import { PaymentName } from "./rename-payment";
 import { StatusBadge } from "./status-badge";
 
 type Payment = ReturnType<typeof getPayments>[number];
@@ -20,7 +21,7 @@ export function PaymentRow({ p, month }: { p: Payment; month: string }) {
         <p className="text-[10px] uppercase text-slate-500">día</p>
       </div>
       <div className="min-w-0 flex-1">
-        <p className="truncate font-medium">{p.name}</p>
+        <PaymentName id={p.id} name={p.name} />
         <p className="text-xs text-slate-500">
           {p.category ?? "Sin categoría"} · {when(p)}
           {p.priority === "critica" && <span className="font-semibold text-red-600"> · crítica</span>}

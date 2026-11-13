@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import {
   addExpense, addExtraIncome, addIncome, addIncomePlan, deactivateIncomePlan, deleteExpense, markIncomeReceived,
-  markPaid, monthOf, toISO, deleteIncomeEntry, setStartMonth, unmarkIncomeReceived, unmarkPaid,
+  markPaid, monthOf, renamePayment, toISO, deleteIncomeEntry, setStartMonth, unmarkIncomeReceived, unmarkPaid,
 } from "@/lib/finance";
 import { cop } from "@/lib/format";
 import { FREQUENCY_LABEL, incomeOccurrences, type Frequency } from "@/lib/income";
@@ -37,6 +37,21 @@ export async function markPaidAction(formData: FormData): Promise<void> {
   if (!parsed.success) throw new Error("Datos inválidos");
   markPaid(parsed.data.scheduleId, parsed.data.month, toISO(new Date()), "web", parsed.data.amount, user.id);
   refresh();
+}
+
+export async function renamePaymentAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  await requireUser();
+  const parsed = z
+    .object({ scheduleId: z.coerce.number().int().positive(), name: z.string().trim().min(1, "Escribe un nombre").max(120) })
+    .safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { ok: false, message: parsed.error.issues[0].message };
+  try {
+    renamePayment(parsed.data.scheduleId, parsed.data.name);
+  } catch (e) {
+    return { ok: false, message: e instanceof Error ? e.message : "No se pudo renombrar" };
+  }
+  refresh();
+  return { ok: true, message: "Nombre actualizado" };
 }
 
 export async function addExpenseAction(_prev: FormState, formData: FormData): Promise<FormState> {

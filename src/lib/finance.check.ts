@@ -245,6 +245,21 @@ assert.equal(f.getPayments("2026-03", today).length, 7);
 assert.equal(f.getBudget("2026-03", today).beforeStart, false);
 f.setStartMonth("2026-11");
 assert.equal(f.getPayments("2026-03", today).length, 0);
+// Renombrar un pago: cambia el nombre en todos los meses y en los gastos que ya generó
+f.setStartMonth("2026-01");
+const rp = f.getPayments("2026-03", today)[0];
+const other = f.getPayments("2026-03", today)[1];
+assert.throws(() => f.renamePayment(rp.id, "   ")); // vacío
+assert.throws(() => f.renamePayment(rp.id, other.name)); // ya existe otro con ese nombre
+assert.throws(() => f.renamePayment(999999, "X")); // no existe
+f.markPaid(rp.id, "2026-03", today, "web");
+f.renamePayment(rp.id, "  Nombre corregido  ");
+assert.equal(f.getPayments("2026-03", today).find((p) => p.id === rp.id)?.name, "Nombre corregido");
+assert.equal(f.getPayments("2026-04", today).find((p) => p.id === rp.id)?.name, "Nombre corregido"); // todos los meses
+assert.equal(f.getPayments("2026-03", today).find((p) => p.id === rp.id)?.status, "pagado"); // el pago sigue marcado
+f.renamePayment(rp.id, "Nombre corregido"); // mismo nombre sobre sí mismo no es conflicto
+f.unmarkPaid(rp.id, "2026-03");
+f.setStartMonth("2026-11");
 console.log("finance OK", s);
 }
 main();

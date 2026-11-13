@@ -144,6 +144,22 @@ export function markPaid(
   });
 }
 
+/** Cambia el nombre de una obligación (para todos los meses) y de los gastos que ya generó. */
+export function renamePayment(scheduleId: number, nameRaw: string) {
+  const name = nameRaw.trim();
+  if (!name || name.length > 120) throw new Error("Escribe un nombre (hasta 120 caracteres).");
+  return db.transaction((tx) => {
+    const item = tx.select().from(paymentSchedule).where(eq(paymentSchedule.id, scheduleId)).get();
+    if (!item) throw new Error("Obligación no encontrada");
+    const clash = tx.select().from(paymentSchedule)
+      .where(and(eq(paymentSchedule.active, true), eq(paymentSchedule.name, name))).get();
+    if (clash && clash.id !== scheduleId) throw new Error("Ya hay otro pago con ese nombre.");
+    tx.update(paymentSchedule).set({ name }).where(eq(paymentSchedule.id, scheduleId)).run();
+    tx.update(transactions).set({ concept: name }).where(eq(transactions.scheduleId, scheduleId)).run();
+    return name;
+  });
+}
+
 /** Deshace "pagado": borra el gasto de ese pago y devuelve el monto al bolsillo. */
 export function unmarkPaid(scheduleId: number, month: string): boolean {
   return db.transaction((tx) => {
