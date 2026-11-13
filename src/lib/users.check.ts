@@ -110,6 +110,24 @@ async function main() {
   assert.equal(u.userFromToken(other.token, T0), null); // las demás se cerraron
   assert.equal((await u.authenticate("ana", "445566", T0)).ok, true);
 
+  // ---- Correo de Google: solo entra quien el admin autorizó
+  assert.equal(u.userByEmail("ana@gmail.com"), null); // nadie autorizado todavía
+  await assert.rejects(async () => u.setUserEmail(ana.id, "no-es-correo"));
+  u.setUserEmail(ana.id, "  Ana@Gmail.COM ");
+  assert.equal(u.userByEmail("ANA@gmail.com")?.username, "ana"); // sin distinguir mayúsculas
+  assert.equal(u.userByEmail("otra@gmail.com"), null); // correo no autorizado
+  assert.equal(u.userByEmail(""), null);
+  await assert.rejects(async () => u.setUserEmail(admin.id, "ana@gmail.com")); // un correo, una cuenta
+  u.setUserEmail(ana.id, "ana@gmail.com"); // volver a guardar el suyo no es conflicto
+  u.setUserActive(ana.id, false);
+  assert.equal(u.userByEmail("ana@gmail.com"), null); // desactivada: no entra por Google
+  u.setUserActive(ana.id, true);
+  u.setUserEmail(ana.id, ""); // quitar el correo
+  assert.equal(u.userByEmail("ana@gmail.com"), null);
+  await assert.rejects(u.createUser({ username: "luis", name: "Luis", pin: "135790", email: "mal" }));
+  const luis = await u.createUser({ username: "luis", name: "Luis", pin: "135790", email: "Luis@Gmail.com" });
+  assert.equal(u.userByEmail("luis@gmail.com")?.id, luis.id);
+
   console.log("users OK");
 }
 main();

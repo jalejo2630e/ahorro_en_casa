@@ -2,7 +2,7 @@
 
 import { useActionState } from "react";
 import {
-  changeOwnPinAction, createUserAction, loginAction, resetPinAction, setActiveAction, setupAction,
+  changeOwnPinAction, createUserAction, loginAction, resetPinAction, setActiveAction, setEmailAction, setupAction,
 } from "@/app/auth-actions";
 import { input, label, Message, Submit } from "./forms";
 
@@ -45,6 +45,11 @@ export function SetupForm() {
         <label className={label} htmlFor="s-user">Usuario para entrar</label>
         <input id="s-user" name="username" required autoComplete="username" autoCapitalize="none" autoCorrect="off" spellCheck={false} className={input} placeholder="javi" />
         <p className="mt-1 text-xs text-slate-500">Letras, números, punto, guion o guion bajo (3 a 30).</p>
+      </div>
+      <div>
+        <label className={label} htmlFor="s-email">Tu correo de Google <span className="font-normal text-slate-500">(opcional)</span></label>
+        <input id="s-email" name="email" type="email" maxLength={120} autoComplete="email" autoCapitalize="none" className={input} placeholder="tucorreo@gmail.com" />
+        <p className="mt-1 text-xs text-slate-500">Con él podrás entrar con el botón “Continuar con Google”.</p>
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div>
@@ -100,6 +105,10 @@ export function CreateUserForm() {
           <input id="u-user" name="username" required autoCapitalize="none" autoCorrect="off" spellCheck={false} className={input} placeholder="ana" />
         </div>
       </div>
+      <div>
+        <label className={label} htmlFor="u-email">Correo de Google <span className="font-normal text-slate-500">(opcional)</span></label>
+        <input id="u-email" name="email" type="email" maxLength={120} autoCapitalize="none" className={input} placeholder="ana@gmail.com" />
+      </div>
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className={label} htmlFor="u-pin">PIN inicial (6 dígitos)</label>
@@ -133,6 +142,26 @@ export function ResetPinForm({ userId, name }: { userId: number; name: string })
         className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold hover:bg-slate-100 disabled:opacity-60 dark:border-slate-700 dark:hover:bg-slate-800"
       >
         Restablecer PIN
+      </button>
+      {state && <span role="status" className={`text-xs ${state.ok ? "text-emerald-600" : "text-red-600"}`}>{state.message}</span>}
+    </form>
+  );
+}
+
+export function SetEmailForm({ userId, name, email }: { userId: number; name: string; email: string | null }) {
+  const [state, action, pending] = useActionState(setEmailAction, null);
+  return (
+    <form action={action} className="flex flex-wrap items-center gap-2">
+      <input type="hidden" name="userId" value={userId} />
+      <input
+        name="email" type="email" defaultValue={email ?? ""} maxLength={120} autoCapitalize="none"
+        placeholder="correo de Google" aria-label={`Correo de Google de ${name}`} className={`${input} !w-56`}
+      />
+      <button
+        type="submit" disabled={pending}
+        className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold hover:bg-slate-100 disabled:opacity-60 dark:border-slate-700 dark:hover:bg-slate-800"
+      >
+        Guardar correo
       </button>
       {state && <span role="status" className={`text-xs ${state.ok ? "text-emerald-600" : "text-red-600"}`}>{state.message}</span>}
     </form>

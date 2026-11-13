@@ -7,7 +7,7 @@ import {
   currentToken, endSession, isLocalRequest, requireAdmin, requireUser, startSession,
 } from "@/lib/auth";
 import {
-  authenticate, changeOwnPin, countUsers, createUser, resetPin, setUserActive,
+  authenticate, changeOwnPin, countUsers, createUser, resetPin, setUserActive, setUserEmail,
 } from "@/lib/users";
 
 export type AuthState = { ok: boolean; message: string } | null;
@@ -50,7 +50,7 @@ export async function setupAction(_prev: AuthState, formData: FormData): Promise
     return { ok: false, message: "El primer administrador se crea desde la PC donde corre la app (http://localhost:3000)." };
   }
   const parsed = z
-    .object({ username: z.string(), name: z.string(), pin: z.string(), pin2: z.string() })
+    .object({ username: z.string(), name: z.string(), pin: z.string(), pin2: z.string(), email: z.string().max(120).optional() })
     .safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { ok: false, message: "Completa todos los campos." };
   if (parsed.data.pin !== parsed.data.pin2) return { ok: false, message: "Los dos PIN no coinciden." };
@@ -59,6 +59,7 @@ export async function setupAction(_prev: AuthState, formData: FormData): Promise
   try {
     const user = await createUser({
       username: parsed.data.username, name: parsed.data.name, pin: parsed.data.pin, role: "admin",
+      email: parsed.data.email,
     });
     userId = user.id;
   } catch (e) {
@@ -91,6 +92,7 @@ export async function createUserAction(_prev: AuthState, formData: FormData): Pr
     .object({
       username: z.string(), name: z.string(), pin: z.string(),
       role: z.enum(["member", "admin"]).default("member"),
+      email: z.string().max(120).optional(),
     })
     .safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { ok: false, message: "Completa todos los campos." };
@@ -115,6 +117,21 @@ export async function resetPinAction(_prev: AuthState, formData: FormData): Prom
     return { ok: true, message: "PIN restablecido y cuenta desbloqueada." };
   } catch (e) {
     return { ok: false, message: e instanceof Error ? e.message : "No se pudo restablecer." };
+  }
+}
+
+export async function setEmailAction(_prev: AuthState, formData: FormData): Promise<AuthState> {
+  await requireAdmin();
+  const parsed = z
+    .object({ userId: z.coerce.number().int().positive(), email: z.string().max(120) })
+    .safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { ok: false, message: "Datos inválidos." };
+  try {
+    setUserEmail(parsed.data.userId, parsed.data.email);
+    revalidatePath("/cuenta");
+    return { ok: true, message: parsed.data.email.trim() ? "Correo guardado." : "Correo quitado." };
+  } catch (e) {
+    return { ok: false, message: e instanceof Error ? e.message : "No se pudo guardar el correo." };
   }
 }
 

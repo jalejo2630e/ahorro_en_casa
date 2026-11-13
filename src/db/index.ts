@@ -23,6 +23,10 @@ function migrate(conn: Database.Database) {
   conn.exec(
     "CREATE TABLE IF NOT EXISTS `sessions` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`user_id` integer NOT NULL,\n\t`expires_at` integer NOT NULL,\n\t`created_at` text DEFAULT CURRENT_TIMESTAMP NOT NULL\n);",
   );
+  // users.email: correo de Google autorizado (nullable; varios NULL permitidos en el índice único)
+  const userCols = conn.prepare("pragma table_info(users)").all() as { name: string }[];
+  if (!userCols.some((c) => c.name === "email")) conn.exec("ALTER TABLE `users` ADD `email` text;");
+  conn.exec("CREATE UNIQUE INDEX IF NOT EXISTS `users_email_unique` ON `users` (`email`);");
   // transactions.user_id: quién registró el movimiento (ALTER ADD COLUMN nunca borra datos)
   const cols = conn.prepare("pragma table_info(transactions)").all() as { name: string }[];
   if (cols.length > 0 && !cols.some((c) => c.name === "user_id")) {

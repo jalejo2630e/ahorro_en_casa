@@ -55,11 +55,34 @@ function assertNewCredentials(username: string, name: string, pin: string) {
 export const countUsers = () =>
   db.select({ n: sql<number>`count(*)` }).from(users).get()?.n ?? 0;
 
+export const EMAIL_RE = /^[^\s@]{1,64}@[^\s@]+\.[^\s@]{2,}$/;
+export const normalizeEmail = (s: string) => s.trim().toLowerCase();
+
+/** Asocia (o quita, con "") el correo de Google de un usuario. Cada correo solo puede ser de una cuenta. */
+export function setUserEmail(userId: number, emailRaw: string) {
+  const email = normalizeEmail(emailRaw);
+  if (email && (email.length > 120 || !EMAIL_RE.test(email))) throw new Error("Escribe un correo válido.");
+  if (!db.select().from(users).where(eq(users.id, userId)).get()) throw new Error("Usuario no encontrado.");
+  if (email) {
+    const other = db.select().from(users).where(eq(users.email, email)).get();
+    if (other && other.id !== userId) throw new Error("Ese correo ya está asignado a otra cuenta.");
+  }
+  db.update(users).set({ email: email || null }).where(eq(users.id, userId)).run();
+}
+
+/** Usuario ACTIVO con ese correo (ya verificado por Google), o null. Solo entran correos autorizados. */
+export function userByEmail(emailRaw: string): SessionUser | null {
+  const email = normalizeEmail(emailRaw);
+  if (!email) return null;
+  const u = db.select().from(users).where(and(eq(users.email, email), eq(users.active, true))).get();
+  return u ? { id: u.id, username: u.username, name: u.name, role: u.role } : null;
+}
+
 export function listUsers(now = Date.now()) {
   return db
     .select({
       id: users.id, username: users.username, name: users.name, role: users.role, active: users.active,
-      lockedUntil: users.lockedUntil, createdAt: users.createdAt,
+      lockedUntil: users.lockedUntil, createdAt: users.createdAt, email: users.email,
     })
     .from(users)
     .orderBy(users.id)
@@ -67,15 +90,20 @@ export function listUsers(now = Date.now()) {
     .map(({ lockedUntil, ...u }) => ({ ...u, locked: lockedUntil != null && lockedUntil > now }));
 }
 
-export async function createUser(input: { username: string; name: string; pin: string; role?: Role }) {
+export async function createUser(input: { username: string; name: string; pin: string; role?: Role; email?: string }) {
   const username = normalizeUsername(input.username);
   assertNewCredentials(username, input.name, input.pin);
   if (db.select().from(users).where(eq(users.username, username)).get()) {
     throw new Error("Ese usuario ya existe.");
   }
+  const email = normalizeEmail(input.email ?? "");
+  if (email) {
+    if (email.length > 120 || !EMAIL_RE.test(email)) throw new Error("Escribe un correo válido.");
+    if (db.select().from(users).where(eq(users.email, email)).get()) throw new Error("Ese correo ya está asignado a otra cuenta.");
+  }
   const pinHash = await hashPin(input.pin);
   return db.insert(users)
-    .values({ username, name: input.name.trim(), pinHash, role: input.role ?? "member" })
+    .values({ username, name: input.name.trim(), pinHash, role: input.role ?? "member", email: email || null })
     .returning({ id: users.id, username: users.username, name: users.name, role: users.role })
     .get();
 }

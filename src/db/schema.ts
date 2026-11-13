@@ -127,7 +127,9 @@ export const users = sqliteTable("users", {
   lockedUntil: integer("locked_until"), // epoch ms; null = sin bloqueo
   active: integer("active", { mode: "boolean" }).notNull().default(true),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
-});
+  // Correo de Google autorizado por el administrador (minúsculas). Va AL FINAL de la tabla.
+  email: text("email"),
+}, (t) => [uniqueIndex("users_email_unique").on(t.email)]);
 
 // Se guarda el hash (sha256) del token, no el token: si alguien lee la base no puede usar las sesiones.
 export const sessions = sqliteTable("sessions", {

@@ -10,7 +10,9 @@ const PUBLIC_PATHS = new Set(["/login", "/setup", "/manifest.webmanifest"]);
 
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  if (PUBLIC_PATHS.has(pathname) || pathname.startsWith("/icons/")) return NextResponse.next();
+  if (PUBLIC_PATHS.has(pathname) || pathname.startsWith("/icons/") || pathname.startsWith("/api/auth/google")) {
+    return NextResponse.next();
+  }
 
   if (!request.cookies.get(SESSION_COOKIE)?.value) {
     const url = request.nextUrl.clone();

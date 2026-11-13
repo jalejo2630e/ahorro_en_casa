@@ -61,6 +61,11 @@ queda con el nombre de quien lo registró (los del asistente MCP aparecen como "
 - **Seguridad:** el PIN se guarda solo como hash (scrypt); la sesión es una cookie `HttpOnly` y en la base queda únicamente el
   hash del token; tras 5 PIN incorrectos la cuenta se bloquea 15 minutos (el administrador puede desbloquearla restableciendo el PIN).
   El `proxy` solo hace una revisión rápida de la cookie; la verificación real se hace en cada página y en cada Server Action.
+- **Entrar con Google (opcional):** el botón "Continuar con Google" aparece si defines en `.env.local`
+  `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` y `APP_URL` (la dirección con la que abres la app, p. ej. `http://localhost:3000`
+  o `https://mi-pc.tailXXXX.ts.net`). En Google Cloud Console crea un "ID de cliente OAuth" de tipo *Aplicación web* y registra como
+  URI de redirección `<APP_URL>/api/auth/google/callback`. Google solo identifica a la persona: entra **solo quien tenga su correo
+  autorizado** por el administrador en Cuenta (no se crean cuentas solas). Google no acepta IP privadas (192.168.x.x) como redirección.
 - **HTTPS:** si sirves la app por HTTPS (p. ej. con Tailscale), pon `COOKIE_SECURE=true` en `.env.local` para marcar la cookie como `Secure`.
 - El servidor MCP no usa este login: tiene su propio token y solo acepta conexiones desde localhost.
 - Límite conocido: el bloqueo es por usuario (no por IP); alguien que conozca un usuario podría bloquearlo a propósito durante 15 min.

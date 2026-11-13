@@ -1,7 +1,7 @@
 import { connection } from "next/server";
 import { Suspense } from "react";
 import { logoutAction } from "@/app/auth-actions";
-import { ChangePinForm, CreateUserForm, ResetPinForm, ToggleActiveForm } from "@/components/auth-forms";
+import { ChangePinForm, CreateUserForm, ResetPinForm, SetEmailForm, ToggleActiveForm } from "@/components/auth-forms";
 import { requireUser } from "@/lib/auth";
 import { listUsers } from "@/lib/users";
 
@@ -73,6 +73,7 @@ async function Account() {
                       </div>
                       {p.id !== me.id && <ToggleActiveForm userId={p.id} name={p.name} active={p.active} />}
                     </div>
+                    <SetEmailForm userId={p.id} name={p.name} email={p.email} />
                     <ResetPinForm userId={p.id} name={p.name} />
                   </li>
                 );
