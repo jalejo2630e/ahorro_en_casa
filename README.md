@@ -93,3 +93,15 @@ columnas de `src/db/schema.ts` no coincide con la base. Reglas: (1) las columnas
 La pestaña **Ahorro** registra lo que realmente guardaste (monto + fecha, o "ya guardé la meta completa") y muestra el avance de la
 meta de cada mes, la medalla y el año. Lo ahorrado cuenta en el mes de su fecha y deja de ser dinero libre para gastar; la meta
 en sí no se descuenta. El MCP tiene la herramienta `registrar_ahorro` (agrega, no borra).
+
+## Usar la app desde el celular (Tailscale + HTTPS)
+
+1. Instala **Tailscale** en la PC y en el celular, e inicia sesión con la misma cuenta.
+2. En la consola de Tailscale (login.tailscale.com → *DNS*) activa **MagicDNS** y **HTTPS Certificates**.
+3. En la PC: `npm run build`, luego `npm start` (la app queda en el puerto 3000), y en otra terminal `tailscale serve --bg 3000`.
+   Tailscale muestra tu dirección: `https://<nombre-pc>.<tu-red>.ts.net`.
+4. En `.env.local`: `APP_URL=https://<nombre-pc>.<tu-red>.ts.net` y `COOKIE_SECURE=true`. Reinicia la app.
+5. En Google Cloud Console, en tu ID de cliente OAuth, agrega como URI de redirección `<APP_URL>/api/auth/google/callback`.
+6. En el celular abre esa dirección; ya puedes entrar con Google o con tu PIN, e "Instalar" la app. La PC debe estar encendida.
+
+`APP_URL` también autoriza ese nombre para los formularios (Server Actions) en `next.config.ts`.
