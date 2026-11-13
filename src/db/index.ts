@@ -23,6 +23,9 @@ function migrate(conn: Database.Database) {
   conn.exec(
     "CREATE TABLE IF NOT EXISTS `sessions` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`user_id` integer NOT NULL,\n\t`expires_at` integer NOT NULL,\n\t`created_at` text DEFAULT CURRENT_TIMESTAMP NOT NULL\n);",
   );
+  conn.exec(
+    "CREATE TABLE IF NOT EXISTS `savings_deposits` (\n\t`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,\n\t`date` text NOT NULL,\n\t`amount` integer NOT NULL,\n\t`note` text,\n\t`user_id` integer,\n\t`created_at` text DEFAULT CURRENT_TIMESTAMP NOT NULL\n);",
+  );
   // payment_schedule.import_key: nombre original para que `db:import` no duplique pagos renombrados.
   // Se rellena con el nombre actual (solo filas que aún no la tienen).
   const payCols = conn.prepare("pragma table_info(payment_schedule)").all() as { name: string }[];

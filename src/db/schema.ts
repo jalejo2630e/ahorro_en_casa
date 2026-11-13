@@ -51,6 +51,17 @@ export const savingsGoals = sqliteTable("savings_goals", {
   year: integer("year").notNull(),
 });
 
+// Ahorros que la persona realmente guardó (fecha + monto). Suman a la meta del mes en que se guardaron.
+// OJO: src/db/index.ts crea esta tabla con CREATE TABLE IF NOT EXISTS; mantén ese SQL igual a esta definición.
+export const savingsDeposits = sqliteTable("savings_deposits", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  date: text("date").notNull(), // YYYY-MM-DD: cuándo se guardó
+  amount: integer("amount").notNull(),
+  note: text("note"),
+  userId: integer("user_id"), // quién lo registró (null = asistente MCP)
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
 // Obligaciones recurrentes: una fila por obligación, se repite cada mes
 export const paymentSchedule = sqliteTable("payment_schedule", {
   id: integer("id").primaryKey({ autoIncrement: true }),

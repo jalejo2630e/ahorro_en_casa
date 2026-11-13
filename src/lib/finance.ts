@@ -1,7 +1,7 @@
 import { and, eq, isNull, like, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
-  categories, incomeReceipts, incomeSchedule, paymentSchedule, paymentStatus, pockets, savingsGoals,
+  categories, incomeReceipts, incomeSchedule, paymentSchedule, paymentStatus, pockets, savingsDeposits, savingsGoals,
   settings, transactions, users,
 } from "@/db/schema";
 import { daysBetween, daysInMonth, dueDate, monthOf } from "./dates";
@@ -490,7 +490,7 @@ function buildLedger(month: string, today: string, budget: number): LedgerDay[] 
 
 export function getDailyLedger(month: string, today: string): LedgerDay[] {
   const s = getSummary(month, today);
-  return buildLedger(month, today, s.incomeBase - s.obligationsTotal);
+  return buildLedger(month, today, s.incomeBase - s.obligationsTotal - depositedIn(month));
 }
 
 /**
@@ -502,7 +502,9 @@ export function getBudget(month: string, today: string) {
   const s = getSummary(month, today);
   const goal = getSavingsGoal(month);
   const beforeStart = isBeforeStart(month, today);
-  const budget = beforeStart ? 0 : s.incomeBase - s.obligationsTotal;
+  // Lo que ya guardaste como ahorro deja de estar libre (la META de ahorro, en cambio, no se descuenta)
+  const deposited = depositedIn(month);
+  const budget = beforeStart ? 0 : s.incomeBase - s.obligationsTotal - deposited;
   const ledger = buildLedger(month, today, budget);
   const last = ledger.at(-1);
 
@@ -529,6 +531,7 @@ export function getBudget(month: string, today: string) {
     overspent: remaining < 0, // ya gastaste más de lo libre del mes
     // Insumos del cálculo, para mostrarlos (la meta de ahorro NO se resta)
     incomeBase: s.incomeBase, obligationsTotal: s.obligationsTotal, savingsTarget: goal.monthlyTarget,
+    savedDeposits: beforeStart ? 0 : deposited,
   };
 }
 
@@ -580,23 +583,92 @@ export function getExpensesByCategory(month: string) {
     .groupBy(categories.id).all();
 }
 
-function savedIn(prefix: string): number {
+/** Apartado automáticamente de ingresos con "% al ahorro" (prefijo = "YYYY" o "YYYY-MM"). */
+function savedFromIncomeIn(prefix: string): number {
   return (
     db.select({ t: sql<number>`coalesce(sum(${transactions.saved}),0)` })
       .from(transactions).where(like(transactions.date, `${prefix}-%`)).get()?.t ?? 0
   );
 }
 
-/** Meta de ahorro: `saved` es lo apartado en el mes; `yearSaved` lo apartado en el año. */
+/** Ahorros que registraste a mano (fecha + monto) en el mes o año. */
+export function depositedIn(prefix: string): number {
+  return (
+    db.select({ t: sql<number>`coalesce(sum(${savingsDeposits.amount}),0)` })
+      .from(savingsDeposits).where(like(savingsDeposits.date, `${prefix}-%`)).get()?.t ?? 0
+  );
+}
+
+export type SavingsDeposit = {
+  id: number; date: string; amount: number; note: string | null; by: string | null;
+};
+
+/** Ahorros guardados en un mes, el más reciente primero. */
+export function listSavingsDeposits(month: string): SavingsDeposit[] {
+  return db
+    .select({
+      id: savingsDeposits.id, date: savingsDeposits.date, amount: savingsDeposits.amount,
+      note: savingsDeposits.note, userName: users.name,
+    })
+    .from(savingsDeposits)
+    .leftJoin(users, eq(users.id, savingsDeposits.userId))
+    .where(like(savingsDeposits.date, `${month}-%`))
+    .orderBy(sql`${savingsDeposits.date} desc`, sql`${savingsDeposits.id} desc`)
+    .all()
+    .map(({ userName, ...r }) => ({ ...r, by: userName ?? "Asistente" }));
+}
+
+/**
+ * Registra que guardaste un ahorro: cuándo (`date`) y cuánto. Cuenta para la meta del mes de esa fecha.
+ * Mueve el dinero del bolsillo "Gastos del mes" al "Ahorro intocable".
+ */
+export function addSavingsDeposit(
+  input: { amount: number; date: string; note?: string; userId?: number },
+  today: string,
+) {
+  if (!Number.isInteger(input.amount) || input.amount <= 0) throw new Error("Monto inválido");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date)) throw new Error("Fecha inválida");
+  if (input.date > today) throw new Error("La fecha no puede ser futura: registra lo que ya guardaste.");
+  if (isBeforeStart(monthOf(input.date), today)) {
+    throw new Error("Esa fecha es anterior a tu fecha de inicio: no se llevan ahorros en ese mes.");
+  }
+  return db.transaction((tx) => {
+    const row = tx.insert(savingsDeposits).values({
+      date: input.date, amount: input.amount, note: input.note?.trim() || null, userId: input.userId ?? null,
+    }).returning().get();
+    adjustPocket(pocketId("Gastos del mes"), -input.amount);
+    adjustPocket(pocketId("Ahorro intocable"), input.amount);
+    return row;
+  });
+}
+
+export function deleteSavingsDeposit(id: number): boolean {
+  return db.transaction((tx) => {
+    const row = tx.select().from(savingsDeposits).where(eq(savingsDeposits.id, id)).get();
+    if (!row) return false;
+    adjustPocket(pocketId("Gastos del mes"), row.amount);
+    adjustPocket(pocketId("Ahorro intocable"), -row.amount);
+    tx.delete(savingsDeposits).where(eq(savingsDeposits.id, id)).run();
+    return true;
+  });
+}
+
+/**
+ * Meta de ahorro. `saved` = lo ahorrado en el mes (lo que registras a mano + lo apartado de ingresos con %);
+ * `yearSaved` lo del año. `remaining` es lo que falta para la meta del mes.
+ */
 export function getSavingsGoal(month: string) {
   const year = Number(month.slice(0, 4));
   const goal = db.select().from(savingsGoals).where(eq(savingsGoals.year, year)).get();
-  const saved = savedIn(month);
-  const yearSaved = savedIn(String(year));
+  const deposited = depositedIn(month);
+  const fromIncome = savedFromIncomeIn(month);
+  const saved = deposited + fromIncome;
+  const yearSaved = depositedIn(String(year)) + savedFromIncomeIn(String(year));
   const monthly = goal?.monthlyTarget ?? 0;
   const yearly = goal?.yearlyTarget ?? 0;
   return {
-    saved, yearSaved, monthlyTarget: monthly, yearlyTarget: yearly,
+    saved, deposited, fromIncome, yearSaved, monthlyTarget: monthly, yearlyTarget: yearly,
+    remaining: Math.max(monthly - saved, 0),
     monthlyProgress: monthly ? Math.min(saved / monthly, 1) : 0,
     yearlyProgress: yearly ? Math.min(yearSaved / yearly, 1) : 0,
     medal: medalFor(saved, monthly),

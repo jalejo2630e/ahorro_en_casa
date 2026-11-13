@@ -92,7 +92,10 @@ async function Dashboard({ searchParams }: { searchParams: PageProps<"/">["searc
       <section className={card} aria-label="Reto de ahorro">
         <div className="flex items-center justify-between gap-2">
           <h2 className="font-semibold">Reto de ahorro</h2>
-          <span className="text-sm font-medium">{MEDAL_LABEL[goal.medal]}</span>
+          <span className="flex items-center gap-3 text-sm font-medium">
+            {MEDAL_LABEL[goal.medal]}
+            <Link href={`/ahorro?mes=${month}`} className="text-emerald-600">Registrar ahorro</Link>
+          </span>
         </div>
         <Bar label="Meta mensual" value={goal.saved} target={goal.monthlyTarget} progress={goal.monthlyProgress} />
         <Bar label="Meta anual" value={goal.yearSaved} target={goal.yearlyTarget} progress={goal.yearlyProgress} />

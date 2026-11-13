@@ -8,6 +8,7 @@ const ITEMS = [
   { href: "/pagos", label: "Pagos", icon: "▦" },
   { href: "/gastos", label: "Gastos", icon: "◉" },
   { href: "/ingresos", label: "Ingresos", icon: "⊕" },
+  { href: "/ahorro", label: "Ahorro", icon: "◈" },
   { href: "/anual", label: "Año", icon: "▤" },
   { href: "/cuenta", label: "Cuenta", icon: "☺" },
 ];

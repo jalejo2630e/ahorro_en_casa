@@ -87,3 +87,9 @@ Se recalcula solo al pagar, recibir dinero o registrar gastos: lo que no gastas 
 **Cuidado con los cambios de esquema.** `drizzle-kit push` reconstruye una tabla SQLite (y puede perder filas) si el orden de
 columnas de `src/db/schema.ts` no coincide con la base. Reglas: (1) las columnas nuevas van **siempre al final** de la tabla;
 (2) en una base con datos reales, lo más seguro es un `ALTER TABLE ... ADD COLUMN` manual; (3) nunca uses `--force` sobre tus datos reales.
+
+## Ahorro
+
+La pestaña **Ahorro** registra lo que realmente guardaste (monto + fecha, o "ya guardé la meta completa") y muestra el avance de la
+meta de cada mes, la medalla y el año. Lo ahorrado cuenta en el mes de su fecha y deja de ser dinero libre para gastar; la meta
+en sí no se descuenta. El MCP tiene la herramienta `registrar_ahorro` (agrega, no borra).

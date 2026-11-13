@@ -269,6 +269,40 @@ assert.equal(f.getPayments("2026-03", today).find((p) => p.id === rp.id)?.status
 f.renamePayment(rp.id, "Nombre corregido"); // mismo nombre sobre sí mismo no es conflicto
 f.unmarkPaid(rp.id, "2026-03");
 f.setStartMonth("2026-11");
+// ---- Ahorro: registrar lo que realmente guardaste (monto + fecha)
+f.setStartMonth("2026-01");
+const goal0 = f.getSavingsGoal("2026-03");
+assert.equal(goal0.deposited, 0);
+assert.equal(goal0.remaining, goal0.monthlyTarget);
+assert.throws(() => f.addSavingsDeposit({ amount: 0, date: "2026-03-05" }, today)); // monto inválido
+assert.throws(() => f.addSavingsDeposit({ amount: 100, date: "2026-03-5" }, today)); // fecha inválida
+assert.throws(() => f.addSavingsDeposit({ amount: 100, date: "2027-12-01" }, today)); // futura
+assert.throws(() => f.addSavingsDeposit({ amount: 100, date: "2025-12-01" }, today)); // antes del inicio
+const pocketBefore = f.getBudget("2026-03", today).budget;
+const dep1 = f.addSavingsDeposit({ amount: 400_000, date: "2026-03-05", note: "Alcancía" }, today);
+f.addSavingsDeposit({ amount: 250_000, date: "2026-03-20" }, today);
+f.addSavingsDeposit({ amount: 100_000, date: "2026-04-02" }, today); // otro mes: no cuenta en marzo
+const g3 = f.getSavingsGoal("2026-03");
+assert.equal(g3.saved, 650_000);
+assert.equal(g3.deposited, 650_000);
+assert.equal(g3.remaining, g3.monthlyTarget - 650_000);
+assert.equal(g3.medal, "bronce"); // 65% de la meta
+assert.equal(f.getSavingsGoal("2026-04").saved, 100_000);
+assert.equal(f.listSavingsDeposits("2026-03").length, 2);
+assert.equal(f.listSavingsDeposits("2026-03")[0].date, "2026-03-20"); // el más reciente primero
+assert.equal(f.getSavingsGoal("2026-03").yearSaved, g3.yearSaved);
+// Lo ahorrado deja de estar libre para gastar (la meta, no)
+assert.equal(f.getBudget("2026-03", today).budget, pocketBefore - 650_000);
+assert.equal(f.getBudget("2026-03", today).savedDeposits, 650_000);
+// Cumplir la meta -> oro; quitar un ahorro lo devuelve
+f.addSavingsDeposit({ amount: g3.remaining, date: "2026-03-28" }, today);
+assert.equal(f.getSavingsGoal("2026-03").medal, "oro");
+assert.equal(f.getSavingsGoal("2026-03").remaining, 0);
+assert.equal(f.deleteSavingsDeposit(dep1.id), true);
+assert.equal(f.deleteSavingsDeposit(dep1.id), false); // ya no existe
+assert.equal(f.getSavingsGoal("2026-03").deposited, 250_000 + g3.remaining);
+f.setStartMonth("2026-11");
+
 console.log("finance OK", s);
 }
 main();

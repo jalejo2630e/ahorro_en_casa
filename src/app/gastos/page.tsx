@@ -135,7 +135,8 @@ async function Expenses({ searchParams }: { searchParams: PageProps<"/gastos">["
         </section>
       )}
       <p className="-mt-3 text-xs text-slate-500">
-        Libre = ingresos {cop(b.incomeBase)} − pagos obligatorios {cop(b.obligationsTotal)} (no se descuenta la meta de ahorro).
+        Libre = ingresos {cop(b.incomeBase)} − pagos obligatorios {cop(b.obligationsTotal)}
+        {b.savedDeposits > 0 && <> − ahorro ya guardado {cop(b.savedDeposits)}</>} (la meta de ahorro no se descuenta, solo lo que ya guardaste).
       </p>
 
       <div className="grid gap-6 md:grid-cols-5">

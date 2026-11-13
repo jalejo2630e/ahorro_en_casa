@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import {
-  addExpense, addExtraIncome, addIncome, addIncomePlan, deactivateIncomePlan, deleteExpense, markIncomeReceived,
+  addExpense, addExtraIncome, addIncome, addIncomePlan, addSavingsDeposit, deactivateIncomePlan, deleteExpense,
+  deleteSavingsDeposit, getSavingsGoal, markIncomeReceived,
   markPaid, monthOf, renamePayment, toISO, deleteIncomeEntry, setStartMonth, unmarkIncomeReceived, unmarkPaid,
 } from "@/lib/finance";
 import { cop } from "@/lib/format";
@@ -52,6 +53,48 @@ export async function renamePaymentAction(_prev: FormState, formData: FormData):
   }
   refresh();
   return { ok: true, message: "Nombre actualizado" };
+}
+
+/** Registra un ahorro guardado: monto (o "la meta que falta") y la fecha en que se guardó. */
+export async function addSavingsAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const user = await requireUser();
+  const parsed = z
+    .object({
+      amount: z.string().optional(),
+      date: dateSchema,
+      note: z.string().trim().max(120).optional(),
+      full: z.string().optional(), // botón "Guardé la meta completa"
+    })
+    .safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { ok: false, message: "Indica la fecha en que lo guardaste." };
+  const d = parsed.data;
+  const today = toISO(new Date());
+
+  let amount: number;
+  if (d.full) {
+    const left = getSavingsGoal(monthOf(d.date)).remaining;
+    if (left <= 0) return { ok: false, message: "Ese mes ya cumpliste la meta (o no hay meta definida)." };
+    amount = left;
+  } else {
+    const n = Number((d.amount ?? "").replace(/\D/g, ""));
+    if (!Number.isInteger(n) || n <= 0) return { ok: false, message: "Escribe cuánto ahorraste." };
+    amount = n;
+  }
+  try {
+    addSavingsDeposit({ amount, date: d.date, note: d.note, userId: user.id }, today);
+  } catch (e) {
+    return { ok: false, message: e instanceof Error ? e.message : "No se pudo registrar el ahorro" };
+  }
+  refresh();
+  return { ok: true, message: `Ahorro de ${cop(amount)} registrado el ${d.date}.` };
+}
+
+export async function deleteSavingsAction(formData: FormData): Promise<void> {
+  await requireUser();
+  const parsed = z.object({ id: z.coerce.number().int().positive() }).safeParse(Object.fromEntries(formData));
+  if (!parsed.success) throw new Error("Datos inválidos");
+  deleteSavingsDeposit(parsed.data.id);
+  refresh();
 }
 
 export async function addExpenseAction(_prev: FormState, formData: FormData): Promise<FormState> {

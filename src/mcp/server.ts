@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import {
-  addExpense, addExtraIncome, getBudget, getExpensesByCategory, getIncomePlan, getPayments, getSavingsGoal,
+  addExpense, addExtraIncome, addSavingsDeposit, getBudget, getExpensesByCategory, getIncomePlan, getPayments, getSavingsGoal,
   getSummary, isBeforeStart, listCategories, markIncomeReceived, markPaid, monthOf, toISO, upcomingPayments,
 } from "@/lib/finance";
 
@@ -220,6 +220,35 @@ export function createMcpServer() {
         return ok({ registrado: true, id: t.id, concepto: t.concept, monto: t.amount, fecha: t.date });
       } catch (e) {
         return fail(e instanceof Error ? e.message : "No se pudo registrar");
+      }
+    },
+  );
+
+  server.registerTool(
+    "registrar_ahorro",
+    {
+      title: "Registrar un ahorro guardado",
+      description:
+        "Registra dinero que el usuario YA guardó como ahorro (cuánto y en qué fecha). Cuenta para la meta del mes de esa fecha " +
+        "y deja de ser dinero libre para gastos diarios. La fecha no puede ser futura. Para ver el avance usa verificar_meta_ahorro.",
+      inputSchema: {
+        monto: z.number().int().positive().describe("Monto ahorrado en COP, sin decimales"),
+        fecha: dateSchema.optional().describe("YYYY-MM-DD en que lo guardó. Por defecto, hoy."),
+        nota: z.string().max(120).optional().describe("Dónde lo guardó (opcional)"),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false },
+    },
+    async ({ monto, fecha, nota }) => {
+      try {
+        const today = toISO(new Date());
+        const d = addSavingsDeposit({ amount: monto, date: fecha ?? today, note: nota }, today);
+        const g = getSavingsGoal(monthOf(d.date));
+        return ok({
+          registrado: true, id: d.id, monto: d.amount, fecha: d.date,
+          ahorradoEnElMes: g.saved, metaMensual: g.monthlyTarget, faltaParaLaMeta: g.remaining, medalla: g.medal,
+        });
+      } catch (e) {
+        return fail(e instanceof Error ? e.message : "No se pudo registrar el ahorro");
       }
     },
   );
