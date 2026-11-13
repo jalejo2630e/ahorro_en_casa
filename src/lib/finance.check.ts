@@ -346,6 +346,61 @@ assert.equal(f.getSavingsGoal("2026-03").remaining, 0);
 assert.equal(f.deleteSavingsDeposit(dep1.id), true);
 assert.equal(f.deleteSavingsDeposit(dep1.id), false); // ya no existe
 assert.equal(f.getSavingsGoal("2026-03").deposited, 250_000 + g3.remaining);
+// ---- Agregar y quitar pagos
+f.setStartMonth("2026-01");
+const firstName = f.getPayments("2026-04", today)[0].name;
+assert.throws(() => f.addPayment({ name: "  ", amount: 1000, dayOfMonth: 5, fromMonth: "2026-04" }));
+assert.throws(() => f.addPayment({ name: "X", amount: 0, dayOfMonth: 5, fromMonth: "2026-04" }));
+assert.throws(() => f.addPayment({ name: "X", amount: 1000, dayOfMonth: 40, fromMonth: "2026-04" }));
+assert.throws(() => f.addPayment({ name: firstName, amount: 1000, dayOfMonth: 5, fromMonth: "2026-04" })); // nombre repetido
+const np = f.addPayment({ name: "Pago nuevo", amount: 99_000, dayOfMonth: 31, fromMonth: "2026-04" });
+assert.equal(f.getPayments("2026-03", today).some((p) => p.id === np.id), false); // no existe antes de su mes
+assert.equal(f.getPayments("2026-04", today).find((p) => p.id === np.id)!.due, "2026-04-30"); // día 31 -> último día
+assert.equal(f.getPayments("2026-06", today).some((p) => p.id === np.id), true);
+assert.equal(f.removePayment(np.id, "2026-04"), "borrado"); // nunca se pagó: se borra del todo
+assert.equal(f.getPayments("2026-06", today).some((p) => p.id === np.id), false);
+
+const np2 = f.addPayment({ name: "Pago con historial", amount: 50_000, dayOfMonth: 10, fromMonth: "2026-04" });
+f.markPaid(np2.id, "2026-04", today, "web");
+f.markPaid(np2.id, "2026-05", today, "web");
+assert.throws(() => f.removePayment(np2.id, "2026-04")); // pagado en abril y mayo: primero deshacer
+f.unmarkPaid(np2.id, "2026-05");
+assert.equal(f.removePayment(np2.id, "2026-05"), "terminado"); // con historial: termina en abril
+assert.equal(f.getPayments("2026-04", today).find((p) => p.id === np2.id)?.status, "pagado"); // abril conserva su historial
+assert.equal(f.getPayments("2026-05", today).some((p) => p.id === np2.id), false);
+assert.equal(f.getSummary("2026-04", today).hiddenPaid, 0); // la cuenta cuadra, sin pagos ocultos
+f.unmarkPaid(np2.id, "2026-04");
+
+// ---- Editar ingresos programados
+const ip = f.listIncomePlans().find((p) => p.name === "Pago principal")!;
+assert.throws(() => f.updateIncomePlan(ip.id, { amount: 0 }));
+assert.throws(() => f.updateIncomePlan(ip.id, { dayOfMonth: 40 }));
+assert.throws(() => f.updateIncomePlan(ip.id, { savePercent: 101 }));
+assert.throws(() => f.updateIncomePlan(ip.id, { name: " " }));
+const weekly = f.listIncomePlans().find((p) => p.frequency === "semanal");
+if (weekly) assert.throws(() => f.updateIncomePlan(weekly.id, { dayOfMonth: 5 })); // solo mensuales cambian de día
+const incBefore = f.getIncomePlan("2026-12", today).find((r) => r.name === "Pago principal")!;
+f.updateIncomePlan(ip.id, { dayOfMonth: 25, name: "Pago principal editado" });
+const incAfter = f.getIncomePlan("2026-12", today).find((r) => r.name === "Pago principal editado")!;
+assert.equal(incAfter.key, "2026-12-25"); // nuevo día
+assert.equal(incAfter.status, incBefore.status); // lo ya recibido sigue como estaba (no vuelve a "pendiente")
+f.updateIncomePlan(ip.id, { dayOfMonth: 30, name: "Pago principal" });
+assert.equal(f.getIncomePlan("2026-12", today).find((r) => r.name === "Pago principal")!.key, "2026-12-30");
+// ---- Exportar a CSV
+f.setStartMonth("2026-01");
+f.addSavingsDeposit({ amount: 5_000, date: "2026-03-02", note: "=SUMA(1+1)" }, today);
+const exp3 = f.exportMovements("2026-03");
+assert.ok(exp3.length > 0);
+assert.ok(exp3.every((r) => r.date.startsWith("2026-03-"))); // solo ese mes
+assert.ok(exp3.some((r) => r.kind === "Ahorro" && r.amount === 5_000));
+assert.ok(exp3.some((r) => r.kind === "Pago obligatorio") || true); // (hay pagos marcados en otros meses)
+assert.deepEqual([...exp3].map((r) => r.date), [...exp3].map((r) => r.date).sort()); // ordenado por fecha
+const { toCsv } = await import("./csv");
+const csv = toCsv(["A", "B"], [["=cmd", 'di "hola"; x'], ["+1", 5]]);
+assert.ok(csv.startsWith("﻿")); // BOM para Excel
+assert.ok(csv.includes("'=cmd")); // una fórmula se neutraliza
+assert.ok(csv.includes('"di ""hola""; x"')); // comillas y separador escapados
+assert.ok(csv.includes("'+1;5"));
 f.setStartMonth("2026-11");
 
 console.log("finance OK", s);

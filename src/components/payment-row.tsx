@@ -33,7 +33,7 @@ export function PaymentRow({ p, month, today }: { p: Payment; month: string; tod
           <p className="text-[10px] uppercase text-slate-500">día</p>
         </div>
         <div className="min-w-0 flex-1">
-          <PaymentName id={p.id} name={p.name} amount={p.amount} day={p.dayOfMonth} />
+          <PaymentName id={p.id} name={p.name} amount={p.amount} day={p.dayOfMonth} month={month} />
           <p className="text-xs text-slate-500">
             {p.category ?? "Sin categoría"} · {when(p)}
             {p.priority === "critica" && <span className="font-semibold text-red-600"> · crítica</span>}

@@ -1,10 +1,11 @@
-import { and, eq, isNull, like, or, sql } from "drizzle-orm";
+import { and, eq, gte, isNull, like, lte, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   categories, incomeReceipts, incomeSchedule, paymentSchedule, paymentStatus, pockets, savingsDeposits, savingsGoals,
   settings, transactions, users,
 } from "@/db/schema";
 import { daysBetween, daysInMonth, dueDate, monthOf } from "./dates";
+import { shiftMonth } from "./format";
 import { incomeOccurrences, type IncomeRule } from "./income";
 
 export type IncomeStatus = "recibido" | "pendiente" | "atrasado";
@@ -76,7 +77,11 @@ export function getPayments(month: string, today: string) {
       and(eq(paymentStatus.scheduleId, paymentSchedule.id), eq(paymentStatus.month, month)),
     )
     .leftJoin(transactions, eq(transactions.id, paymentStatus.transactionId))
-    .where(eq(paymentSchedule.active, true))
+    .where(and(
+      eq(paymentSchedule.active, true),
+      or(isNull(paymentSchedule.startMonth), lte(paymentSchedule.startMonth, month)),
+      or(isNull(paymentSchedule.endMonth), gte(paymentSchedule.endMonth, month)),
+    ))
     .all();
 
   const result = rows
@@ -185,6 +190,56 @@ export function updatePayment(
     }
     if (Object.keys(set).length > 0) tx.update(paymentSchedule).set(set).where(eq(paymentSchedule.id, scheduleId)).run();
     return { ...item, ...set };
+  });
+}
+
+/** Crea una obligación nueva. Existe desde `fromMonth` (así no aparece como vencida en meses anteriores). */
+export function addPayment(input: {
+  name: string; amount: number; dayOfMonth: number; category?: string; fromMonth: string;
+}) {
+  const name = input.name.trim();
+  if (!name || name.length > 120) throw new Error("Escribe un nombre (hasta 120 caracteres).");
+  if (!Number.isInteger(input.amount) || input.amount <= 0) throw new Error("El monto debe ser mayor a cero.");
+  if (!Number.isInteger(input.dayOfMonth) || input.dayOfMonth < 1 || input.dayOfMonth > 31) {
+    throw new Error("El día de pago debe estar entre 1 y 31.");
+  }
+  if (!MONTH_RE.test(input.fromMonth)) throw new Error("Mes inválido");
+  return db.transaction((tx) => {
+    const clash = tx.select().from(paymentSchedule)
+      .where(and(eq(paymentSchedule.active, true), eq(paymentSchedule.name, name))).get();
+    if (clash) throw new Error("Ya hay un pago con ese nombre.");
+    const cat = input.category
+      ? tx.select().from(categories).where(eq(categories.name, input.category)).get()
+      : undefined;
+    return tx.insert(paymentSchedule).values({
+      name, amount: input.amount, dayOfMonth: input.dayOfMonth, categoryId: cat?.id ?? null,
+      startMonth: input.fromMonth, // importKey queda vacío: `db:import` no lo toca
+    }).returning().get();
+  });
+}
+
+/**
+ * Quita una obligación "desde `fromMonth`". Si nunca se pagó, se borra del todo; si tiene pagos, se le pone
+ * un último mes (el anterior) para que los meses pasados conserven su historial.
+ */
+export function removePayment(scheduleId: number, fromMonth: string): "borrado" | "terminado" {
+  if (!MONTH_RE.test(fromMonth)) throw new Error("Mes inválido");
+  return db.transaction((tx) => {
+    const item = tx.select().from(paymentSchedule).where(eq(paymentSchedule.id, scheduleId)).get();
+    if (!item) throw new Error("Obligación no encontrada");
+    const paid = tx.select().from(paymentStatus)
+      .where(and(eq(paymentStatus.scheduleId, scheduleId), sql`${paymentStatus.paidAt} is not null`)).all();
+    if (paid.length === 0) {
+      tx.delete(paymentStatus).where(eq(paymentStatus.scheduleId, scheduleId)).run();
+      tx.delete(paymentSchedule).where(eq(paymentSchedule.id, scheduleId)).run();
+      return "borrado" as const;
+    }
+    const blocking = paid.find((p) => p.month >= fromMonth);
+    if (blocking) {
+      throw new Error(`Ya está pagado en ${blocking.month}. Pulsa "Deshacer" en ese mes antes de quitarlo.`);
+    }
+    tx.update(paymentSchedule).set({ endMonth: shiftMonth(fromMonth, -1) }).where(eq(paymentSchedule.id, scheduleId)).run();
+    return "terminado" as const;
   });
 }
 
@@ -297,6 +352,49 @@ export function addIncomePlan(input: {
     weekday: input.frequency === "semanal" ? (input.weekday ?? 0) : null,
     savePercent: Math.min(Math.max(input.savePercent ?? 0, 0), 100),
   }).returning().get();
+}
+
+/**
+ * Edita un ingreso programado: nombre, monto, % al ahorro y (solo en los mensuales) el día de cobro.
+ * Al cambiar el día se reubican los cobros ya marcados, para que no queden como "pendientes" otra vez.
+ */
+export function updateIncomePlan(
+  id: number,
+  changes: { name?: string; amount?: number; savePercent?: number; dayOfMonth?: number | null },
+) {
+  const set: Partial<typeof incomeSchedule.$inferInsert> = {};
+  if (changes.name !== undefined) {
+    const name = changes.name.trim();
+    if (!name || name.length > 120) throw new Error("Escribe un nombre (hasta 120 caracteres).");
+    set.name = name;
+  }
+  if (changes.amount !== undefined) {
+    if (!Number.isInteger(changes.amount) || changes.amount <= 0) throw new Error("El monto debe ser mayor a cero.");
+    set.amount = changes.amount;
+  }
+  if (changes.savePercent !== undefined) {
+    if (!Number.isInteger(changes.savePercent) || changes.savePercent < 0 || changes.savePercent > 100) {
+      throw new Error("El porcentaje de ahorro va de 0 a 100.");
+    }
+    set.savePercent = changes.savePercent;
+  }
+  return db.transaction((tx) => {
+    const plan = tx.select().from(incomeSchedule).where(eq(incomeSchedule.id, id)).get();
+    if (!plan) throw new Error("Ingreso no encontrado");
+    if (changes.dayOfMonth !== undefined) {
+      if (plan.frequency !== "mensual") throw new Error("Solo se puede cambiar el día en los ingresos mensuales.");
+      const day = changes.dayOfMonth;
+      if (day !== null && (!Number.isInteger(day) || day < 1 || day > 31)) throw new Error("El día debe estar entre 1 y 31.");
+      set.dayOfMonth = day;
+      for (const r of tx.select().from(incomeReceipts).where(eq(incomeReceipts.scheduleId, id)).all()) {
+        const m = r.occurrence.slice(0, 7);
+        const key = day ? dueDate(m, day) : `${m}-00`;
+        if (key !== r.occurrence) tx.update(incomeReceipts).set({ occurrence: key }).where(eq(incomeReceipts.id, r.id)).run();
+      }
+    }
+    if (Object.keys(set).length > 0) tx.update(incomeSchedule).set(set).where(eq(incomeSchedule.id, id)).run();
+    return { ...plan, ...set };
+  });
 }
 
 /** Se desactiva en vez de borrar: conserva el historial de lo ya recibido. */
@@ -708,6 +806,48 @@ export function getSavingsGoal(month: string) {
     yearlyProgress: yearly ? Math.min(yearSaved / yearly, 1) : 0,
     medal: medalFor(saved, monthly),
   };
+}
+
+export type ExportRow = {
+  date: string; kind: "Ingreso" | "Gasto" | "Pago obligatorio" | "Dinero extra" | "Ahorro";
+  concept: string; category: string; amount: number; by: string;
+};
+
+/** Todos los movimientos (y ahorros guardados) de un año ("YYYY") o un mes ("YYYY-MM"), por fecha. */
+export function exportMovements(prefix: string): ExportRow[] {
+  const tx = db
+    .select({
+      date: transactions.date, type: transactions.type, extra: transactions.extra, concept: transactions.concept,
+      amount: transactions.amount, scheduleId: transactions.scheduleId, category: categories.name,
+      userName: users.name, source: transactions.source,
+    })
+    .from(transactions)
+    .leftJoin(categories, eq(categories.id, transactions.categoryId))
+    .leftJoin(users, eq(users.id, transactions.userId))
+    .where(like(transactions.date, `${prefix}-%`))
+    .all()
+    .map((r): ExportRow => ({
+      date: r.date,
+      kind: r.type === "ingreso" ? (r.extra ? "Dinero extra" : "Ingreso") : r.scheduleId != null ? "Pago obligatorio" : "Gasto",
+      concept: r.concept, category: r.category ?? "", amount: r.amount, by: whoLabel(r.userName, r.source) ?? "",
+    }));
+  const savings = listSavingsDepositsByPrefix(prefix).map((d): ExportRow => ({
+    date: d.date, kind: "Ahorro", concept: d.note || "Ahorro", category: "", amount: d.amount, by: d.by ?? "",
+  }));
+  return [...tx, ...savings].sort((a, b) => a.date.localeCompare(b.date));
+}
+
+function listSavingsDepositsByPrefix(prefix: string): SavingsDeposit[] {
+  return db
+    .select({
+      id: savingsDeposits.id, date: savingsDeposits.date, amount: savingsDeposits.amount,
+      note: savingsDeposits.note, userName: users.name,
+    })
+    .from(savingsDeposits)
+    .leftJoin(users, eq(users.id, savingsDeposits.userId))
+    .where(like(savingsDeposits.date, `${prefix}-%`))
+    .all()
+    .map(({ userName, ...r }) => ({ ...r, by: userName ?? "Asistente" }));
 }
 
 /** Acepta "YYYY-MM"; cualquier otra cosa cae en el mes de hoy. */

@@ -37,3 +37,15 @@ body {
   color: var(--foreground);
   font-family: var(--font-geist-sans), system-ui, sans-serif;
 }
+
+/* Paleta de las gráficas (validada: contraste y distinción para daltonismo, en claro y oscuro) */
+.viz {
+  --series-1: #2a78d6; /* ingresos */
+  --series-2: #eb6834; /* gastos */
+}
+@media (prefers-color-scheme: dark) {
+  .viz {
+    --series-1: #3987e5;
+    --series-2: #d95926;
+  }
+}

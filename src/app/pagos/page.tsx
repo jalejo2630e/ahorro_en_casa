@@ -1,12 +1,13 @@
 import Link from "next/link";
 import { connection } from "next/server";
 import { Suspense } from "react";
+import { NewPaymentForm } from "@/components/new-payment";
 import { PaymentRow } from "@/components/payment-row";
 import { DOT } from "@/components/status-badge";
 import { cop, monthLabel, shiftMonth } from "@/lib/format";
 import { BeforeStartNotice } from "@/components/before-start";
 import { MonthTabs } from "@/components/month-tabs";
-import { daysInMonth, getPayments, getStartMonth, monthOf, parseMonth, toISO } from "@/lib/finance";
+import { daysInMonth, getPayments, getStartMonth, listCategories, monthOf, parseMonth, toISO } from "@/lib/finance";
 import { requireUser } from "@/lib/auth";
 
 export const metadata = { title: "Pagos obligatorios · Ahorro en casa" };
@@ -100,6 +101,13 @@ async function Calendar({ searchParams }: { searchParams: PageProps<"/pagos">["s
           </ul>
         )}
       </section>
+
+      <details className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+        <summary className="cursor-pointer font-semibold">+ Agregar un pago</summary>
+        <div className="mt-3 max-w-md">
+          <NewPaymentForm month={month} categories={listCategories().map((c) => c.name)} />
+        </div>
+      </details>
     </div>
   );
 }

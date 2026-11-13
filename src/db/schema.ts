@@ -75,6 +75,10 @@ export const paymentSchedule = sqliteTable("payment_schedule", {
   active: integer("active", { mode: "boolean" }).notNull().default(true),
   // Nombre original con el que `db:import` identifica esta obligación aunque la renombres en la app.
   importKey: text("import_key"), // va AL FINAL de la tabla
+  // Primer y último mes (YYYY-MM) en que existe la obligación; vacío = sin límite. Quitar un pago "desde este mes"
+  // pone endMonth, así los meses anteriores conservan su historial. Van AL FINAL de la tabla.
+  startMonth: text("start_month"),
+  endMonth: text("end_month"),
 });
 
 // Pagos efectivos por mes: aquí vive el estado del semáforo

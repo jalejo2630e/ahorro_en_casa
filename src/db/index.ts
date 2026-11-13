@@ -33,6 +33,12 @@ function migrate(conn: Database.Database) {
     conn.exec("ALTER TABLE `payment_schedule` ADD `import_key` text;");
     conn.exec("UPDATE `payment_schedule` SET `import_key` = `name` WHERE `import_key` IS NULL;");
   }
+  if (payCols.length > 0 && !payCols.some((c) => c.name === "start_month")) {
+    conn.exec("ALTER TABLE `payment_schedule` ADD `start_month` text;");
+  }
+  if (payCols.length > 0 && !payCols.some((c) => c.name === "end_month")) {
+    conn.exec("ALTER TABLE `payment_schedule` ADD `end_month` text;");
+  }
   // users.email: correo de Google autorizado (nullable; varios NULL permitidos en el índice único)
   const userCols = conn.prepare("pragma table_info(users)").all() as { name: string }[];
   if (!userCols.some((c) => c.name === "email")) conn.exec("ALTER TABLE `users` ADD `email` text;");

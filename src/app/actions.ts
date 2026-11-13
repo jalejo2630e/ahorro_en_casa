@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import {
-  addExpense, addExtraIncome, addIncome, addIncomePlan, addSavingsDeposit, deactivateIncomePlan, deleteExpense,
+  addExpense, addExtraIncome, addIncome, addIncomePlan, addPayment, addSavingsDeposit, removePayment, updateIncomePlan, deactivateIncomePlan, deleteExpense,
   deleteSavingsDeposit, getSavingsGoal, markIncomeReceived,
   markPaid, monthOf, toISO, updatePayment, deleteIncomeEntry, setStartMonth, unmarkIncomeReceived, unmarkPaid,
 } from "@/lib/finance";
@@ -67,6 +67,77 @@ export async function updatePaymentAction(_prev: FormState, formData: FormData):
   }
   refresh();
   return { ok: true, message: "Pago actualizado" };
+}
+
+/** Crea una obligación nueva (aparece desde el mes que estás viendo). */
+export async function addPaymentAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  await requireUser();
+  const parsed = z
+    .object({
+      name: z.string().trim().min(1, "Escribe un nombre").max(120),
+      amount: amountSchema,
+      day: z.coerce.number().int().min(1, "El día va de 1 a 31").max(31, "El día va de 1 a 31"),
+      category: z.string().max(60).optional(),
+      month: monthSchema,
+    })
+    .safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { ok: false, message: parsed.error.issues[0].message };
+  try {
+    addPayment({
+      name: parsed.data.name, amount: parsed.data.amount, dayOfMonth: parsed.data.day,
+      category: parsed.data.category || undefined, fromMonth: parsed.data.month,
+    });
+  } catch (e) {
+    return { ok: false, message: e instanceof Error ? e.message : "No se pudo crear el pago" };
+  }
+  refresh();
+  return { ok: true, message: `Pago creado desde ${parsed.data.month}` };
+}
+
+/** Quita una obligación desde el mes que estás viendo (los meses anteriores conservan su historial). */
+export async function removePaymentAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  await requireUser();
+  const parsed = z
+    .object({ scheduleId: z.coerce.number().int().positive(), month: monthSchema })
+    .safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { ok: false, message: "Datos inválidos" };
+  try {
+    removePayment(parsed.data.scheduleId, parsed.data.month);
+  } catch (e) {
+    return { ok: false, message: e instanceof Error ? e.message : "No se pudo quitar el pago" };
+  }
+  refresh();
+  return { ok: true, message: "Pago quitado" };
+}
+
+/** Edita un ingreso programado (nombre, monto, % al ahorro y, si es mensual, el día). */
+export async function updateIncomePlanAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  await requireUser();
+  const parsed = z
+    .object({
+      id: z.coerce.number().int().positive(),
+      name: z.string().trim().min(1, "Escribe un nombre").max(120),
+      amount: amountSchema,
+      savePercent: z.coerce.number().int().min(0, "El ahorro va de 0 a 100").max(100, "El ahorro va de 0 a 100"),
+      day: z.string().optional(), // solo viene en los mensuales; vacío = sin día fijo
+    })
+    .safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { ok: false, message: parsed.error.issues[0].message };
+  const d = parsed.data;
+  let dayOfMonth: number | null | undefined;
+  if (d.day !== undefined) {
+    dayOfMonth = d.day.trim() === "" ? null : Number(d.day);
+    if (dayOfMonth !== null && (!Number.isInteger(dayOfMonth) || dayOfMonth < 1 || dayOfMonth > 31)) {
+      return { ok: false, message: "El día va de 1 a 31" };
+    }
+  }
+  try {
+    updateIncomePlan(d.id, { name: d.name, amount: d.amount, savePercent: d.savePercent, dayOfMonth });
+  } catch (e) {
+    return { ok: false, message: e instanceof Error ? e.message : "No se pudo guardar" };
+  }
+  refresh();
+  return { ok: true, message: "Ingreso actualizado" };
 }
 
 /** Registra un ahorro guardado: monto (o "la meta que falta") y la fecha en que se guardó. */

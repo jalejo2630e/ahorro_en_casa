@@ -105,3 +105,16 @@ en sí no se descuenta. El MCP tiene la herramienta `registrar_ahorro` (agrega, 
 6. En el celular abre esa dirección; ya puedes entrar con Google o con tu PIN, e "Instalar" la app. La PC debe estar encendida.
 
 `APP_URL` también autoriza ese nombre para los formularios (Server Actions) en `next.config.ts`.
+
+## Que arranque sola, reiniciar y respaldos
+
+- **Arranque automático (Windows):** `iniciar-app.cmd` arranca la app (modo producción) si no está corriendo. Una copia de llamada
+  vive en la carpeta de inicio de Windows (`shell:startup` → `AhorroEnCasa.cmd`), así que la app sube sola al iniciar sesión.
+  Tailscale conserva la publicación (`tailscale serve --bg 3000`) tras reiniciar.
+- **Después de cambiar código:** ejecuta `reiniciar-app.cmd` (detiene la app, recompila y vuelve a arrancar).
+- **Respaldo automático:** al arrancar y cada pocas horas, si el último respaldo tiene más de ~20 h, se crea uno en `data/backups/`
+  (se conservan los 30 últimos). `npm run db:backup` sigue haciendo uno a mano.
+- **Exportar:** en **Año**, "Descargar los movimientos" baja un CSV (Excel) con ingresos, gastos, pagos y ahorros del año
+  (`/api/export?anio=AAAA` o `?mes=AAAA-MM`).
+- **Pagos:** en **Pagos** puedes agregar uno ("+ Agregar un pago"), editarlo (✎) y quitarlo desde el mes que ves; lo que ya
+  pagaste en meses anteriores se conserva. Los ingresos programados también se editan con ✎.

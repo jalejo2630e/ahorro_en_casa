@@ -90,7 +90,8 @@ db.transaction((tx) => {
   }
 
   // Quitar las que ya no están (conservando las que tienen historial de pagos)
-  const stale = tx.select().from(paymentSchedule).all().filter((p) => !claimed.has(p.id));
+  // Solo las que vinieron de un archivo (tienen import_key): las que creaste en la app no se tocan
+  const stale = tx.select().from(paymentSchedule).all().filter((p) => p.importKey !== null && !claimed.has(p.id));
   const withHistory = new Set(
     stale.length
       ? tx.select({ id: paymentStatus.scheduleId }).from(paymentStatus)

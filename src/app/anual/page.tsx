@@ -5,6 +5,7 @@ import { cop, MEDAL_LABEL, monthLabel } from "@/lib/format";
 import { setStartMonthAction } from "@/app/actions";
 import { getStartMonth, getYearOverview, toISO } from "@/lib/finance";
 import { requireUser } from "@/lib/auth";
+import { YearChart } from "@/components/year-chart";
 
 export const metadata = { title: "Año · Ahorro en casa" };
 
@@ -71,6 +72,14 @@ async function Year({ searchParams }: { searchParams: PageProps<"/anual">["searc
           Los meses anteriores no cuentan pagos ni ingresos, así no aparecen como vencidos. Puedes moverla cuando quieras.
         </p>
       </section>
+
+      <YearChart months={months} year={year} />
+
+      <p className="text-sm">
+        <a href={`/api/export?anio=${year}`} download className="font-medium text-emerald-600 underline">
+          Descargar los movimientos de {year} (Excel / CSV)
+        </a>
+      </p>
 
       <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {months.map((m) => {

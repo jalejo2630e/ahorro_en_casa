@@ -1,10 +1,11 @@
 import { connection } from "next/server";
 import { Suspense } from "react";
 import {
-  deactivateIncomeAction, deleteIncomeEntryAction, markIncomeReceivedAction, unmarkIncomeReceivedAction,
+  deleteIncomeEntryAction, markIncomeReceivedAction, unmarkIncomeReceivedAction,
 } from "@/app/actions";
 import { BeforeStartNotice } from "@/components/before-start";
 import { IncomeForm } from "@/components/income-form";
+import { IncomePlanRow } from "@/components/income-plan-row";
 import { MonthTabs } from "@/components/month-tabs";
 import { StatusBadge } from "@/components/status-badge";
 import { cop, monthLabel } from "@/lib/format";
@@ -203,28 +204,14 @@ async function Income({ searchParams }: { searchParams: PageProps<"/ingresos">["
                 {plans.map((p) => {
                   const n = incomeOccurrences(p.rule, month).length;
                   return (
-                    <li key={p.id} className="flex items-center gap-3 py-3">
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate font-medium">{p.name}</p>
-                        <p className="text-xs text-slate-500">
-                          {FREQUENCY_LABEL[p.frequency]} · {describeRule(p.rule)} · {cop(p.amount)} c/u
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <p className="font-semibold tabular-nums">{cop(p.amount * n)}</p>
-                        <p className="text-xs text-slate-500">{n} pago{n === 1 ? "" : "s"} este mes</p>
-                      </div>
-                      <form action={deactivateIncomeAction}>
-                        <input type="hidden" name="id" value={p.id} />
-                        <button
-                          type="submit"
-                          aria-label={`Quitar ${p.name}`}
-                          className="rounded px-1.5 text-slate-400 hover:text-red-600 focus-visible:outline-2 focus-visible:outline-red-600"
-                        >
-                          ✕
-                        </button>
-                      </form>
-                    </li>
+                    <IncomePlanRow
+                      key={p.id}
+                      plan={{
+                        id: p.id, name: p.name, amount: p.amount, frequency: p.frequency,
+                        frequencyLabel: FREQUENCY_LABEL[p.frequency], description: describeRule(p.rule),
+                        dayOfMonth: p.dayOfMonth, savePercent: p.savePercent, payments: n, monthTotal: p.amount * n,
+                      }}
+                    />
                   );
                 })}
               </ul>
