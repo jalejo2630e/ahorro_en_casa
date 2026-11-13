@@ -447,25 +447,22 @@ export function deleteExpense(id: number): boolean {
   });
 }
 
-/** Lo asignado hasta el día `day` (1..dim). Se redondea sobre el acumulado, así no se pierde ni sobra un peso. */
-export function cumulativeAllowance(budget: number, day: number, dim: number): number {
-  return budget > 0 ? Math.round((budget * day) / dim) : 0;
-}
-
 export type LedgerDay = {
   date: string;
-  allowance: number; // lo que el presupuesto asigna a este día
-  carried: number; // lo que venía de los días anteriores (negativo si te pasaste)
+  freeAtStart: number; // lo libre del mes al empezar este día (ingresos − pagos − lo ya gastado + dinero extra)
+  daysLeft: number; // días que quedaban, contando este
+  allowance: number; // lo que te tocaba gastar este día = freeAtStart / daysLeft
   spent: number;
-  received: number; // dinero extra recibido
-  balance: number; // lo que puedes gastar al cierre del día = carried + allowance + received − spent
+  received: number; // dinero extra recibido (ya está dentro de freeAtStart)
+  balance: number; // lo que podías gastar al cierre del día = allowance − spent
   entries: DailyEntry[];
 };
 
 /**
- * Libro diario con acumulación: cada día se asigna presupuesto/días del mes; lo que no gastas pasa al
- * día siguiente, lo que te pasas se descuenta del siguiente, y el dinero extra suma. Solo hay filas
- * hasta hoy (mes actual), todos los días (mes pasado) o ninguna (mes futuro).
+ * Libro diario: cada día se reparte lo LIBRE del mes entre los días que quedan (contando ese día).
+ * Libre = ingresos − pagos obligatorios (sin descontar el ahorro) − gastos ya hechos + dinero extra.
+ * Lo que no gastas hoy queda libre y se reparte entre los días restantes (sube el de mañana); lo que te
+ * pasas lo baja. Solo hay filas hasta hoy (mes actual), todos los días (mes pasado) o ninguna (mes futuro).
  */
 function buildLedger(month: string, today: string, budget: number): LedgerDay[] {
   const dim = daysInMonth(month);
@@ -474,34 +471,38 @@ function buildLedger(month: string, today: string, budget: number): LedgerDay[] 
   const entries = getDailyEntries(month);
 
   const days: LedgerDay[] = [];
-  let balance = 0;
+  let spentBefore = 0;
+  let extraThrough = 0;
   for (let d = 1; d <= lastDay; d++) {
     const date = `${month}-${String(d).padStart(2, "0")}`;
     const dayEntries = entries.filter((e) => e.date === date);
     const spent = dayEntries.filter((e) => e.kind === "gasto").reduce((a, e) => a + e.amount, 0);
     const received = dayEntries.filter((e) => e.kind === "extra").reduce((a, e) => a + e.amount, 0);
-    const allowance = cumulativeAllowance(budget, d, dim) - cumulativeAllowance(budget, d - 1, dim);
-    const carried = balance;
-    balance = carried + allowance + received - spent;
-    days.push({ date, allowance, carried, spent, received, balance, entries: dayEntries });
+    extraThrough += received;
+    const freeAtStart = budget + extraThrough - spentBefore;
+    const daysLeft = dim - d + 1;
+    const allowance = Math.round(freeAtStart / daysLeft);
+    days.push({ date, freeAtStart, daysLeft, allowance, spent, received, balance: allowance - spent, entries: dayEntries });
+    spentBefore += spent;
   }
   return days;
 }
 
 export function getDailyLedger(month: string, today: string): LedgerDay[] {
   const s = getSummary(month, today);
-  return buildLedger(month, today, s.incomeBase - s.obligationsTotal - getSavingsGoal(month).monthlyTarget);
+  return buildLedger(month, today, s.incomeBase - s.obligationsTotal);
 }
 
 /**
- * Presupuesto para gastos diarios = ingresos − pagos obligatorios − meta de ahorro (+ dinero extra recibido).
- * `availableToday` es lo que puedes gastar hoy sin tocar el ahorro: asignación acumulada − lo gastado + extras.
+ * Lo libre del mes = ingresos − pagos obligatorios (SIN descontar la meta de ahorro) + dinero extra − gastos diarios.
+ * `availableToday` = lo libre dividido entre los días que quedan (contando hoy), menos lo ya gastado hoy.
+ * Se recalcula solo al pagar, recibir dinero, registrar gastos o dinero extra.
  */
 export function getBudget(month: string, today: string) {
   const s = getSummary(month, today);
   const goal = getSavingsGoal(month);
   const beforeStart = isBeforeStart(month, today);
-  const budget = beforeStart ? 0 : s.incomeBase - s.obligationsTotal - goal.monthlyTarget;
+  const budget = beforeStart ? 0 : s.incomeBase - s.obligationsTotal;
   const ledger = buildLedger(month, today, budget);
   const last = ledger.at(-1);
 
@@ -511,21 +512,22 @@ export function getBudget(month: string, today: string) {
   const daysLeft = month < cur ? 0 : month === cur ? dim - elapsed + 1 : dim; // hoy cuenta
   const spent = s.dailyExpenses;
   const extra = s.extraReceived;
-  const pool = budget + extra; // todo lo que puedes gastar en el mes sin tocar el ahorro
+  const pool = budget + extra; // lo libre del mes antes de gastar
+  const remaining = pool - spent; // lo libre que queda
 
   return {
-    month, beforeStart, budget, extra, pool, spent,
-    remaining: pool - spent,
+    month, beforeStart, budget, extra, pool, spent, remaining,
     usedPct: pool > 0 ? spent / pool : spent > 0 ? 1 : 0,
     elapsedPct: elapsed / dim,
     daysLeft,
-    dailyAllowance: budget > 0 ? Math.round(budget / dim) : 0, // referencia: asignación diaria base
+    // Promedio por día de lo que queda libre (mes actual) o del mes entero (futuro/pasado)
+    dailyAllowance: month === cur && daysLeft > 0 ? Math.round(remaining / daysLeft) : budget > 0 ? Math.round(budget / dim) : 0,
     availableToday: last?.balance ?? 0,
-    carried: last?.carried ?? 0, // lo que venía de ayer
     todayAllowance: last?.allowance ?? 0,
+    freeAtStartOfToday: last?.freeAtStart ?? 0,
     averagePerDay: elapsed > 0 ? Math.round(spent / elapsed) : 0,
-    eatingIntoSavings: spent > pool, // ya gastaste más de lo que el mes permitía
-    // Insumos del cálculo, para mostrarlos
+    overspent: remaining < 0, // ya gastaste más de lo libre del mes
+    // Insumos del cálculo, para mostrarlos (la meta de ahorro NO se resta)
     incomeBase: s.incomeBase, obligationsTotal: s.obligationsTotal, savingsTarget: goal.monthlyTarget,
   };
 }

@@ -59,21 +59,38 @@ db.transaction((tx) => {
   }
   const catId = new Map(tx.select().from(categories).all().map((c) => [c.name, c.id]));
 
-  // Obligaciones: actualizar por nombre o insertar
+  // Obligaciones: se identifican por su "import_key" (el nombre del archivo), no por el nombre visible:
+  // así, si renombras un pago en la app, importar NO crea un duplicado ni te pisa el nombre.
   const names = data.egresos.map((e) => e.concepto);
+  const claimed = new Set<number>();
   for (const e of data.egresos) {
     const values = {
-      name: e.concepto, amount: e.monto, dayOfMonth: e.dia_pago,
+      amount: e.monto, dayOfMonth: e.dia_pago,
       categoryId: catId.get(e.categoria)!, priority: e.prioridad,
       fundingSource: e.bolsillo_origen ?? null, active: true,
     };
-    const existing = tx.select().from(paymentSchedule).where(eq(paymentSchedule.name, e.concepto)).get();
-    if (existing) tx.update(paymentSchedule).set(values).where(eq(paymentSchedule.id, existing.id)).run();
-    else tx.insert(paymentSchedule).values(values).run();
+    const all = tx.select().from(paymentSchedule).all();
+    let existing =
+      all.find((p) => p.importKey === e.concepto && !claimed.has(p.id)) ??
+      all.find((p) => p.name === e.concepto && p.importKey === null && !claimed.has(p.id));
+    if (!existing) {
+      // Respaldo: un pago sin clave ajena al archivo con el mismo día y monto (renombrado antes de existir la clave)
+      const same = all.filter(
+        (p) => !claimed.has(p.id) && !names.includes(p.importKey ?? "") && p.dayOfMonth === e.dia_pago && p.amount === e.monto,
+      );
+      if (same.length === 1) existing = same[0];
+    }
+    if (existing) {
+      tx.update(paymentSchedule).set({ ...values, importKey: e.concepto }).where(eq(paymentSchedule.id, existing.id)).run();
+      claimed.add(existing.id);
+    } else {
+      const row = tx.insert(paymentSchedule).values({ ...values, name: e.concepto, importKey: e.concepto }).returning().get();
+      claimed.add(row.id);
+    }
   }
 
   // Quitar las que ya no están (conservando las que tienen historial de pagos)
-  const stale = tx.select().from(paymentSchedule).where(notInArray(paymentSchedule.name, names)).all();
+  const stale = tx.select().from(paymentSchedule).all().filter((p) => !claimed.has(p.id));
   const withHistory = new Set(
     stale.length
       ? tx.select({ id: paymentStatus.scheduleId }).from(paymentStatus)

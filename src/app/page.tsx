@@ -55,10 +55,10 @@ async function Dashboard({ searchParams }: { searchParams: PageProps<"/">["searc
     {
       label: "Gastos diarios", value: cop(s.dailyExpenses), href: `/gastos?mes=${month}`,
       hint: b.budget <= 0
-        ? "sin presupuesto"
+        ? "sin dinero libre"
         : isCurrent
           ? `hoy puedes gastar ${cop(b.availableToday)}`
-          : `${pct(b.usedPct)} del presupuesto`,
+          : `${pct(b.usedPct)} de lo libre`,
     },
     { label: "Margen disponible", value: cop(s.margin), hint: `tasa de ahorro ${pct(s.savingsRate)}`, negative: s.margin < 0 },
   ];

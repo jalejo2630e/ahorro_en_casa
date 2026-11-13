@@ -62,6 +62,8 @@ export const paymentSchedule = sqliteTable("payment_schedule", {
   // Ingreso con el que se planea pagar, p. ej. "Sueldo Empresa 1 (Día 30)"
   fundingSource: text("funding_source"),
   active: integer("active", { mode: "boolean" }).notNull().default(true),
+  // Nombre original con el que `db:import` identifica esta obligación aunque la renombres en la app.
+  importKey: text("import_key"), // va AL FINAL de la tabla
 });
 
 // Pagos efectivos por mes: aquí vive el estado del semáforo

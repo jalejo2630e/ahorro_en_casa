@@ -38,10 +38,11 @@ export function createMcpServer() {
         presupuestoGastosDiarios: {
           presupuestoMes: b.budget, dineroExtraRecibido: b.extra, gastadoEnElMes: b.spent,
           quedaEnElMes: b.remaining, porcentajeUsado: b.usedPct, diasRestantes: b.daysLeft,
-          asignacionDiariaBase: b.dailyAllowance,
-          // Lo que puede gastar HOY sin tocar el ahorro (acumula lo no gastado; negativo si se pasó)
-          disponibleHoy: b.availableToday, veniaDeDiasAnteriores: b.carried,
-          gastandoDelAhorro: b.eatingIntoSavings,
+          // Lo libre = ingresos − pagos obligatorios (sin descontar la meta de ahorro) + extra − gastos diarios
+          promedioPorDiaDeLoQueQueda: b.dailyAllowance,
+          // Lo que puede gastar HOY = lo libre del mes ÷ días que quedan (contando hoy) − lo ya gastado hoy; negativo si se pasó
+          disponibleHoy: b.availableToday, libreAlEmpezarHoy: b.freeAtStartOfToday,
+          gastoMasDeLoLibre: b.overspent,
         },
         gastosPorCategoria: getExpensesByCategory(month),
       });

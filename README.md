@@ -75,6 +75,14 @@ queda con el nombre de quien lo registró (los del asistente MCP aparecen como "
 - `npm run db:push` crea o actualiza las tablas **con red de seguridad**: respalda antes, compara filas después y avisa si algo se perdió.
 - `npm run db:backup` hace un respaldo consistente en `data/backups/` (conserva los 20 últimos).
 - `npm run db:seed` carga datos de ejemplo; `npm run db:import` carga tus finanzas desde `data/finanzas.json`.
+  Los pagos se identifican por su nombre original (columna `import_key`), así que si renombras un pago en la app,
+  importar de nuevo **no** lo duplica ni te cambia el nombre.
+
+## Cuánto puedes gastar hoy
+
+Libre del mes = ingresos − pagos obligatorios (**sin** descontar la meta de ahorro) + dinero extra − gastos diarios.
+Hoy puedes gastar = libre al empezar el día ÷ días que quedan del mes (contando hoy) − lo gastado hoy.
+Se recalcula solo al pagar, recibir dinero o registrar gastos: lo que no gastas se reparte entre los días que quedan y lo que te pasas lo reduce.
 
 **Cuidado con los cambios de esquema.** `drizzle-kit push` reconstruye una tabla SQLite (y puede perder filas) si el orden de
 columnas de `src/db/schema.ts` no coincide con la base. Reglas: (1) las columnas nuevas van **siempre al final** de la tabla;

@@ -72,7 +72,7 @@ async function Expenses({ searchParams }: { searchParams: PageProps<"/gastos">["
       <header>
         <h1 className="text-2xl font-bold">Gastos diarios · {monthLabel(month)}</h1>
         <p className="text-sm text-slate-500">
-          Lo que te sobra después de pagos obligatorios y ahorro, repartido por día. Lo que no gastas se acumula.
+          Lo que te queda libre después de los pagos obligatorios, repartido entre los días que faltan. Se recalcula al pagar o recibir dinero.
         </p>
       </header>
 
@@ -81,15 +81,14 @@ async function Expenses({ searchParams }: { searchParams: PageProps<"/gastos">["
       {noBudget ? (
         <section className={card} aria-label="Sin presupuesto">
           <p className="text-sm text-amber-700 dark:text-amber-400">
-            Tus pagos obligatorios ({cop(b.obligationsTotal)}) y tu meta de ahorro ({cop(b.savingsTarget)}) igualan o superan tus
-            ingresos esperados ({cop(b.incomeBase)}), así que no queda presupuesto para gastos diarios este mes. Cualquier gasto
-            sale de tu ahorro. Revisa tus ingresos en la pestaña Ingresos o suma dinero extra más abajo.
+            Tus pagos obligatorios ({cop(b.obligationsTotal)}) igualan o superan tus ingresos ({cop(b.incomeBase)}), así que no
+            queda dinero libre para gastos diarios este mes. Revisa tus ingresos en la pestaña Ingresos o suma dinero extra más abajo.
           </p>
         </section>
       ) : isFuture ? (
         <section className={card} aria-label="Mes futuro">
           <p className="text-sm text-slate-500">
-            {monthLabel(month)} todavía no empieza. Su presupuesto será <strong>{cop(b.budget)}</strong>, unos{" "}
+            {monthLabel(month)} todavía no empieza. Te quedarían libres <strong>{cop(b.budget)}</strong>, unos{" "}
             <strong>{cop(b.dailyAllowance)}</strong> por día.
           </p>
         </section>
@@ -103,26 +102,25 @@ async function Expenses({ searchParams }: { searchParams: PageProps<"/gastos">["
           </p>
           <p className="mt-1 text-sm text-slate-500">
             {over
-              ? "Mañana arrancas con menos: ese exceso se descuenta de tu asignación."
-              : "Si no lo gastas, se suma a lo de mañana. Gastarlo no toca tu ahorro."}
+              ? "Mañana te toca menos: ese exceso se reparte entre los días que quedan."
+              : "Si no lo gastas, queda libre y se reparte entre los días que quedan."}
           </p>
 
           {isCurrent && todayRow && (
             <dl className="mt-4 space-y-1 border-t border-slate-100 pt-3 text-sm dark:border-slate-800">
-              <Line label="Te venía de días anteriores" value={todayRow.carried} />
-              <Line label="Asignación de hoy" value={todayRow.allowance} sign />
-              {todayRow.received > 0 && <Line label="Dinero extra recibido hoy" value={todayRow.received} sign />}
+              <Line label="Libre del mes al empezar hoy" value={todayRow.freeAtStart} />
+              <Line label={`÷ ${todayRow.daysLeft} día(s) que quedan, contando hoy`} value={todayRow.allowance} sign />
               <Line label="Gastado hoy" value={-todayRow.spent} sign />
               <div className="flex justify-between border-t border-slate-100 pt-1 font-semibold dark:border-slate-800">
-                <dt>Disponible ahora</dt>
+                <dt>Todavía puedes gastar hoy</dt>
                 <dd className={`tabular-nums ${over ? "text-red-600" : ""}`}>{cop(todayRow.balance)}</dd>
               </div>
             </dl>
           )}
 
-          {b.eatingIntoSavings && (
+          {b.overspent && (
             <p role="alert" className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm font-medium text-red-700 dark:bg-red-950 dark:text-red-300">
-              ⚠️ Ya gastaste {cop(b.spent)}, más de los {cop(b.pool)} que el mes permitía: estás gastando de tu ahorro.
+              ⚠️ Ya gastaste {cop(b.spent)}, más de los {cop(b.pool)} que te quedaban libres este mes.
             </p>
           )}
         </section>
@@ -130,14 +128,14 @@ async function Expenses({ searchParams }: { searchParams: PageProps<"/gastos">["
 
       {!isFuture && (
         <section aria-label="Resumen del mes" className="grid grid-cols-2 gap-3 md:grid-cols-4">
-          <Stat label="Presupuesto del mes" value={cop(b.budget)} hint={`${cop(b.dailyAllowance)} por día`} />
+          <Stat label="Libre del mes" value={cop(b.budget)} hint={isCurrent ? `${cop(b.dailyAllowance)} por día de aquí en adelante` : undefined} />
           <Stat label="Dinero extra recibido" value={cop(b.extra)} hint="regalos y similares" />
           <Stat label="Gastado en el mes" value={cop(b.spent)} hint={b.pool > 0 ? `${pct(b.usedPct)} de ${cop(b.pool)}` : undefined} />
           <Stat label="Te queda en el mes" value={cop(b.remaining)} hint={isCurrent ? `${b.daysLeft} día(s), contando hoy` : undefined} negative={b.remaining < 0} />
         </section>
       )}
       <p className="-mt-3 text-xs text-slate-500">
-        Presupuesto = ingresos {cop(b.incomeBase)} − pagos obligatorios {cop(b.obligationsTotal)} − meta de ahorro {cop(b.savingsTarget)}.
+        Libre = ingresos {cop(b.incomeBase)} − pagos obligatorios {cop(b.obligationsTotal)} (no se descuenta la meta de ahorro).
       </p>
 
       <div className="grid gap-6 md:grid-cols-5">
@@ -206,7 +204,7 @@ function DayRow({ d }: { d: LedgerDay }) {
         </p>
       </div>
       <p className="text-xs text-slate-500 tabular-nums">
-        {d.carried !== 0 && <>venía {cop(d.carried)} · </>}asignado +{cop(d.allowance)}
+        te tocaba {cop(d.allowance)} ({cop(d.freeAtStart)} ÷ {d.daysLeft} d)
         {d.received > 0 && <> · recibido +{cop(d.received)}</>}
         {d.spent > 0 && <> · gastado −{cop(d.spent)}</>}
       </p>

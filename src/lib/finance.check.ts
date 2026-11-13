@@ -77,15 +77,15 @@ assert.equal(f.expectedIncome("2026-12", today), 5_800_000 + 31 * 10_000);
 f.deactivateIncomePlan(plan.id);
 assert.equal(f.expectedIncome("2026-12", today), 5_800_000);
 
-// ---- Presupuesto de gastos diarios = ingresos - pagos obligatorios - meta de ahorro
-// diciembre: 5.8M esperado (recibido 3.5M < esperado) - 1.815M pagos - 1M ahorro
+// ---- Libre del mes = ingresos - pagos obligatorios (SIN descontar la meta de ahorro)
+// diciembre: 5.8M esperado (recibido 3.5M < esperado) - 1.815M pagos
 const b0 = f.getBudget("2026-12", today);
-assert.equal(b0.budget, 2_985_000);
+assert.equal(b0.budget, 3_985_000);
 assert.equal(b0.daysLeft, 31); // mes futuro: todos los días por delante
 const exp = f.addExpense({ concept: "Mercado", amount: 100_000, category: "Alimentación", date: "2026-12-02" });
 const b1 = f.getBudget("2026-12", today);
 assert.equal(b1.spent, 100_000);
-assert.equal(b1.remaining, 2_885_000);
+assert.equal(b1.remaining, 3_885_000);
 // un pago obligatorio NO cuenta como gasto diario
 const arrDic = f.getPayments("2026-12", today).find((p) => p.name === "Arriendo")!;
 const pagoDic = f.markPaid(arrDic.id, "2026-12", "2026-12-01");
@@ -96,41 +96,50 @@ assert.equal(f.deleteExpense((pagoDic as { transactionId: number }).transactionI
 assert.equal(f.deleteExpense(exp.id), true);
 assert.equal(f.getBudget("2026-12", today).spent, 0);
 
-// ---- Presupuesto diario ACUMULATIVO (diciembre: 2.985.000 repartidos en 31 días)
+// ---- Lo que puedes gastar hoy = lo libre del mes / días que quedan (contando hoy)
 const D = (d: number) => `2026-12-${String(d).padStart(2, "0")}`;
-// Sin gastar nada, lo asignado se acumula: asignado hasta el día d = round(2.985.000 * d / 31)
+// Día 3, sin gastar nada: quedan 29 días contando hoy -> 3.985.000 / 29
 const b3 = f.getBudget("2026-12", D(3));
-assert.equal(b3.availableToday, 288_871); // 3 días acumulados
-assert.equal(b3.carried, 192_581); // lo que venía de los días 1 y 2
-assert.equal(b3.todayAllowance, 96_290); // asignación de hoy
+assert.equal(b3.daysLeft, 29);
+assert.equal(b3.freeAtStartOfToday, 3_985_000);
+assert.equal(b3.availableToday, 137_414); // round(3.985.000 / 29)
+assert.equal(b3.todayAllowance, 137_414);
 assert.equal(f.getBudget("2026-12", today).availableToday, 0); // mes futuro: todavía no corre
-assert.equal(f.getBudget("2026-12", today).carried, 0);
 
-// Gasto el día 2 y recibo un regalo el día 5
+// Gasto el día 2 y recibo un regalo el día 5: lo gastado baja lo libre, el regalo lo sube; se reparte en los días que quedan
 f.addExpense({ concept: "Mercado", amount: 100_000, category: "Alimentación", date: D(2) });
 const gift = f.addExtraIncome({ concept: "Regalo", amount: 50_000, date: D(5) });
-assert.equal(f.getBudget("2026-12", D(10)).availableToday, 912_903); // 962.903 - 100.000 + 50.000
-// El regalo NO es ingreso del mes (no infla el presupuesto base); sí suma a lo disponible
+// día 10: libre = 3.985.000 + 50.000 - 100.000 = 3.935.000, quedan 22 días
+assert.equal(f.getBudget("2026-12", D(10)).availableToday, 178_864); // round(3.935.000 / 22)
+// El regalo NO es ingreso del mes; sí suma a lo libre
 assert.equal(f.getSummary("2026-12", D(10)).income, 3_500_000);
 assert.equal(f.getSummary("2026-12", D(10)).extraReceived, 50_000);
-assert.equal(f.getBudget("2026-12", D(10)).budget, 2_985_000);
-assert.equal(f.getBudget("2026-12", D(10)).pool, 3_035_000);
+assert.equal(f.getBudget("2026-12", D(10)).budget, 3_985_000);
+assert.equal(f.getBudget("2026-12", D(10)).pool, 4_035_000);
+assert.equal(f.getBudget("2026-12", D(10)).remaining, 3_935_000);
 
-// Me paso el día 10: queda en negativo y el día siguiente arranca con menos
+// Me paso el día 10: queda en negativo y lo de los días siguientes baja
 f.addExpense({ concept: "Salida", amount: 1_000_000, date: D(10) });
-assert.equal(f.getBudget("2026-12", D(10)).availableToday, -87_097);
+assert.equal(f.getBudget("2026-12", D(10)).availableToday, -821_136); // 178.864 - 1.000.000
 const b11 = f.getBudget("2026-12", D(11));
-assert.equal(b11.carried, -87_097); // arrastra el exceso
-assert.equal(b11.availableToday, 9_194); // 1.059.194 asignados - 1.100.000 gastados + 50.000 de regalo
-assert.equal(b11.eatingIntoSavings, false); // aún dentro del total del mes
+assert.equal(b11.freeAtStartOfToday, 2_935_000); // 3.985.000 + 50.000 - 1.100.000
+assert.equal(b11.daysLeft, 21);
+assert.equal(b11.availableToday, 139_762); // round(2.935.000 / 21)
+assert.equal(b11.overspent, false); // aún queda libre en el mes
 
 // Historial día a día
 const ledger = f.getDailyLedger("2026-12", D(11));
 assert.equal(ledger.length, 11);
 assert.equal(ledger[1].spent, 100_000); // día 2
 assert.equal(ledger[4].received, 50_000); // día 5
-assert.equal(ledger[9].balance, -87_097); // día 10
-assert.equal(ledger[10].carried, ledger[9].balance); // lo de cada día pasa al siguiente
+assert.equal(ledger[9].balance, -821_136); // día 10
+assert.equal(ledger[10].freeAtStart, 2_935_000);
+assert.equal(ledger[10].daysLeft, 21);
+
+// Si gasto más de lo libre del mes, se marca
+f.addExpense({ concept: "Compra enorme", amount: 5_000_000, date: D(11) });
+assert.equal(f.getBudget("2026-12", D(11)).overspent, true);
+f.deleteExpense(f.getDailyEntries("2026-12").find((e) => e.concept === "Compra enorme")!.id);
 
 // Borrar el regalo lo quita; un ingreso planeado (sueldo) NO se puede borrar por esta vía
 assert.equal(f.deleteExpense(gift.id), true);
@@ -208,8 +217,8 @@ const sum1 = f.getSummary("2026-12", today);
 assert.equal(sum1.expenses, sum0.expenses + 180_000);
 assert.equal(sum1.obligationsTotal, sum0.obligationsTotal + 30_000); // el total refleja lo real
 assert.equal(sum1.pendingObligations, sum0.pendingObligations - 150_000); // lo pendiente baja lo programado
-assert.equal(f.getBudget("2026-12", today).budget, f.getBudget("2026-12", today).incomeBase - sum1.obligationsTotal - 1_000_000);
-assert.equal(f.getBudget("2026-12", today).budget, 2_985_000 - 30_000); // pagar de más reduce el presupuesto diario
+assert.equal(f.getBudget("2026-12", today).budget, f.getBudget("2026-12", today).incomeBase - sum1.obligationsTotal);
+assert.equal(f.getBudget("2026-12", today).budget, 3_985_000 - 30_000); // pagar de más reduce lo libre
 // deshacer vuelve a lo programado
 assert.equal(f.unmarkPaid(addi.id, "2026-12"), true);
 const sum2 = f.getSummary("2026-12", today);

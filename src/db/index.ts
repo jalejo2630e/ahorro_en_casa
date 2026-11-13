@@ -23,6 +23,13 @@ function migrate(conn: Database.Database) {
   conn.exec(
     "CREATE TABLE IF NOT EXISTS `sessions` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`user_id` integer NOT NULL,\n\t`expires_at` integer NOT NULL,\n\t`created_at` text DEFAULT CURRENT_TIMESTAMP NOT NULL\n);",
   );
+  // payment_schedule.import_key: nombre original para que `db:import` no duplique pagos renombrados.
+  // Se rellena con el nombre actual (solo filas que aún no la tienen).
+  const payCols = conn.prepare("pragma table_info(payment_schedule)").all() as { name: string }[];
+  if (payCols.length > 0 && !payCols.some((c) => c.name === "import_key")) {
+    conn.exec("ALTER TABLE `payment_schedule` ADD `import_key` text;");
+    conn.exec("UPDATE `payment_schedule` SET `import_key` = `name` WHERE `import_key` IS NULL;");
+  }
   // users.email: correo de Google autorizado (nullable; varios NULL permitidos en el índice único)
   const userCols = conn.prepare("pragma table_info(users)").all() as { name: string }[];
   if (!userCols.some((c) => c.name === "email")) conn.exec("ALTER TABLE `users` ADD `email` text;");
