@@ -31,7 +31,7 @@ const lost = Object.entries(before).filter(([t, n]) => (after[t] ?? 0) < n);
 if (lost.length > 0) {
   console.error("\n!!! SE PERDIERON FILAS TRAS EL PUSH !!!");
   for (const [t, n] of lost) console.error(`  ${t}: ${n} -> ${after[t] ?? 0}`);
-  console.error("Restaura desde el respaldo más reciente en data/backups/ (cierra la app antes).");
+  console.error("Restaura desde el respaldo más reciente en la carpeta local de respaldos (ver src/lib/backup-dir.ts) (cierra la app antes).");
   process.exit(1);
 }
 console.log("Esquema aplicado; ninguna tabla perdió filas.");

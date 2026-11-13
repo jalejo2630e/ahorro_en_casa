@@ -1,9 +1,10 @@
 // Respaldo automático de la base: al arrancar la app y cada pocas horas, si el último respaldo ya tiene
 // más de ~20 horas. Usa la API de respaldo de SQLite (consistente aunque la app esté en uso) y deja
-// los archivos en data/backups/ (los mismos que crea `npm run db:backup`). Nunca rompe la app: si falla, solo avisa.
+// los archivos en la carpeta local de respaldos, fuera de OneDrive (los mismos que crea `npm run db:backup`). Nunca rompe la app: si falla, solo avisa.
 import fs from "node:fs";
 import path from "node:path";
 import Database from "better-sqlite3";
+import { backupDir } from "./backup-dir";
 
 const KEEP = 30; // respaldos que se conservan
 const MAX_AGE_MS = 20 * 60 * 60 * 1000; // se hace uno nuevo si el último tiene más de 20 h
@@ -15,7 +16,7 @@ export async function backupIfNeeded(): Promise<string | null> {
   const src = process.env.DATABASE_PATH ?? "data/ahorro.db";
   if (!fs.existsSync(src)) return null;
   const base = path.basename(src, ".db");
-  const dir = path.join(path.dirname(src), "backups");
+  const dir = backupDir();
   fs.mkdirSync(dir, { recursive: true });
 
   const mine = fs.readdirSync(dir).filter((f) => f.startsWith(`${base}-`) && f.endsWith(".db")).sort();

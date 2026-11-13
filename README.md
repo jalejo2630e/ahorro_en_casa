@@ -73,7 +73,7 @@ queda con el nombre de quien lo registró (los del asistente MCP aparecen como "
 ## Base de datos (SQLite en `data/`, no se sube a git)
 
 - `npm run db:push` crea o actualiza las tablas **con red de seguridad**: respalda antes, compara filas después y avisa si algo se perdió.
-- `npm run db:backup` hace un respaldo consistente en `data/backups/` (conserva los 20 últimos).
+- `npm run db:backup` hace un respaldo consistente en `AppData/Local/AhorroEnCasa/respaldos` (disco local, fuera de OneDrive; se cambia con `BACKUP_DIR`) (conserva los 20 últimos).
 - `npm run db:seed` carga datos de ejemplo; `npm run db:import` carga tus finanzas desde `data/finanzas.json`.
   Los pagos se identifican por su nombre original (columna `import_key`), así que si renombras un pago en la app,
   importar de nuevo **no** lo duplica ni te cambia el nombre.
@@ -112,7 +112,7 @@ en sí no se descuenta. El MCP tiene la herramienta `registrar_ahorro` (agrega, 
   vive en la carpeta de inicio de Windows (`shell:startup` → `AhorroEnCasa.cmd`), así que la app sube sola al iniciar sesión.
   Tailscale conserva la publicación (`tailscale serve --bg 3000`) tras reiniciar.
 - **Después de cambiar código:** ejecuta `reiniciar-app.cmd` (detiene la app, recompila y vuelve a arrancar).
-- **Respaldo automático:** al arrancar y cada pocas horas, si el último respaldo tiene más de ~20 h, se crea uno en `data/backups/`
+- **Respaldo automático:** al arrancar y cada pocas horas, si el último respaldo tiene más de ~20 h, se crea uno en `AppData/Local/AhorroEnCasa/respaldos` (disco local, fuera de OneDrive; se cambia con `BACKUP_DIR`)
   (se conservan los 30 últimos). `npm run db:backup` sigue haciendo uno a mano.
 - **Exportar:** en **Año**, "Descargar los movimientos" baja un CSV (Excel) con ingresos, gastos, pagos y ahorros del año
   (`/api/export?anio=AAAA` o `?mes=AAAA-MM`).

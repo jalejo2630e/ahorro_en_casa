@@ -1,9 +1,10 @@
 // Respaldo consistente de la base (incluye lo que aún está en el WAL).
-// Uso: npm run db:backup   ->  data/backups/ahorro-AAAAMMDD-HHMMSS.db
+// Uso: npm run db:backup   ->  la carpeta local de respaldos (fuera de OneDrive, ver src/lib/backup-dir.ts) (fuera de OneDrive)
 // `npm run db:push` lo ejecuta antes de tocar el esquema.
 import fs from "node:fs";
 import path from "node:path";
 import Database from "better-sqlite3";
+import { backupDir } from "../lib/backup-dir";
 
 const src = process.env.DATABASE_PATH ?? "data/ahorro.db";
 
@@ -12,7 +13,7 @@ async function main() {
     console.log(`No hay base en ${src}; nada que respaldar.`);
     return;
   }
-  const dir = path.join(path.dirname(src), "backups");
+  const dir = backupDir();
   fs.mkdirSync(dir, { recursive: true });
   const stamp = new Date().toISOString().replace(/[-:]/g, "").replace("T", "-").slice(0, 15);
   const dest = path.join(dir, `${path.basename(src, ".db")}-${stamp}.db`);
