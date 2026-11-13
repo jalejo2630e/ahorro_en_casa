@@ -96,7 +96,7 @@ async function Calendar({ searchParams }: { searchParams: PageProps<"/pagos">["s
           <p className="py-6 text-center text-sm text-slate-500">No hay obligaciones configuradas.</p>
         ) : (
           <ul className="divide-y divide-slate-100 dark:divide-slate-800">
-            {payments.map((p) => <PaymentRow key={p.id} p={p} month={month} />)}
+            {payments.map((p) => <PaymentRow key={p.id} p={p} month={month} today={today} />)}
           </ul>
         )}
       </section>

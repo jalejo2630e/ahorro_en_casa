@@ -1,4 +1,5 @@
 import { markPaidAction, unmarkPaidAction } from "@/app/actions";
+import { daysInMonth, monthOf } from "@/lib/dates";
 import { cop } from "@/lib/format";
 import type { getPayments } from "@/lib/finance";
 import { PaymentName } from "./rename-payment";
@@ -13,7 +14,10 @@ function when(p: Payment) {
   return `Vence en ${p.daysLeft} d`;
 }
 
-export function PaymentRow({ p, month }: { p: Payment; month: string }) {
+export function PaymentRow({ p, month, today }: { p: Payment; month: string; today: string }) {
+  // Día en que se pagó: dentro del mes del pago y nunca en el futuro (un mes futuro no tiene días ya pasados)
+  const cur = monthOf(today);
+  const dateMax = month > cur ? null : month === cur ? today : `${month}-${String(daysInMonth(month)).padStart(2, "0")}`;
   return (
     <li className="flex items-center gap-3 py-3">
       <div className="w-12 shrink-0 text-center">
@@ -46,7 +50,7 @@ export function PaymentRow({ p, month }: { p: Payment; month: string }) {
             </button>
           </form>
         ) : (
-          <form action={markPaidAction} className="flex items-center gap-2">
+          <form action={markPaidAction} className="flex flex-wrap items-center justify-end gap-2">
             <StatusBadge status={p.status} />
             <input type="hidden" name="scheduleId" value={p.id} />
             <input type="hidden" name="month" value={month} />
@@ -57,6 +61,14 @@ export function PaymentRow({ p, month }: { p: Payment; month: string }) {
               aria-label={`Monto pagado de ${p.name} (vacío = ${cop(p.amount)})`}
               className="w-24 rounded-md border border-slate-300 bg-white px-2 py-1 text-right text-xs tabular-nums dark:border-slate-700 dark:bg-slate-900"
             />
+            {dateMax && (
+              <input
+                name="paidDate" type="date" min={`${month}-01`} max={dateMax}
+                aria-label={`Día en que pagaste ${p.name} (vacío = ${month === cur ? "hoy" : "el día programado"})`}
+                title="Día en que lo pagaste (vacío = hoy)"
+                className="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900"
+              />
+            )}
             <button
               type="submit"
               className="rounded-md bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-emerald-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600"

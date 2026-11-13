@@ -116,7 +116,7 @@ async function Dashboard({ searchParams }: { searchParams: PageProps<"/">["searc
             <p className="py-6 text-center text-sm text-slate-500">{isCurrent ? "Nada pendiente esta semana 🎉" : "Nada pendiente este mes 🎉"}</p>
           ) : (
             <ul className="divide-y divide-slate-100 dark:divide-slate-800">
-              {next.map((p) => <PaymentRow key={p.id} p={p} month={month} />)}
+              {next.map((p) => <PaymentRow key={p.id} p={p} month={month} today={today} />)}
             </ul>
           )}
         </section>

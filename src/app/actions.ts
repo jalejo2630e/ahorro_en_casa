@@ -33,10 +33,16 @@ const refresh = () => revalidatePath("/", "layout");
 export async function markPaidAction(formData: FormData): Promise<void> {
   const user = await requireUser();
   const parsed = z
-    .object({ scheduleId: z.coerce.number().int().positive(), month: monthSchema, amount: optAmount })
+    .object({
+      scheduleId: z.coerce.number().int().positive(), month: monthSchema, amount: optAmount,
+      paidDate: dateSchema.optional().or(z.literal("")), // vacío = hoy (o el día programado si es otro mes)
+    })
     .safeParse(Object.fromEntries(formData));
   if (!parsed.success) throw new Error("Datos inválidos");
-  markPaid(parsed.data.scheduleId, parsed.data.month, toISO(new Date()), "web", parsed.data.amount, user.id);
+  markPaid(
+    parsed.data.scheduleId, parsed.data.month, toISO(new Date()), "web", parsed.data.amount, user.id,
+    parsed.data.paidDate || undefined,
+  );
   refresh();
 }
 

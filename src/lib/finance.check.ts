@@ -281,6 +281,18 @@ assert.equal(f.getPayments("2026-03", today).find((p) => p.id === rp.id)!.effect
 assert.equal(f.getPayments("2026-03", today).find((p) => p.id === rp.id)!.name, "Nombre corregido"); // solo cambió lo indicado
 f.updatePayment(rp.id, { amount: rp.amount, dayOfMonth: rp.dayOfMonth }); // se puede devolver
 f.unmarkPaid(rp.id, "2026-03");
+
+// Marcar pagado indicando el día en que se pagó
+assert.throws(() => f.markPaid(rp.id, "2026-03", today, "web", undefined, undefined, "2026-04-02")); // fuera del mes
+assert.throws(() => f.markPaid(rp.id, "2026-03", today, "web", undefined, undefined, "03/05/2026")); // formato
+assert.throws(() => f.markPaid(rp.id, "2026-11", today, "web", undefined, undefined, "2026-11-30")); // futuro (hoy es 13)
+f.markPaid(rp.id, "2026-03", today, "web", undefined, undefined, "2026-03-07");
+assert.equal(f.getPayments("2026-03", today).find((p) => p.id === rp.id)!.paidAt, "2026-03-07"); // quedó con ese día
+f.unmarkPaid(rp.id, "2026-03");
+const unpaidNow = f.getPayments("2026-11", today).find((p) => p.status !== "pagado")!; // mes actual, día pasado
+f.markPaid(unpaidNow.id, "2026-11", today, "web", undefined, undefined, "2026-11-05");
+assert.equal(f.getPayments("2026-11", today).find((p) => p.id === unpaidNow.id)!.paidAt, "2026-11-05");
+f.unmarkPaid(unpaidNow.id, "2026-11");
 f.setStartMonth("2026-11");
 // ---- Ahorro: registrar lo que realmente guardaste (monto + fecha)
 f.setStartMonth("2026-01");

@@ -116,8 +116,14 @@ export function markPaid(
   scheduleId: number, month: string, paidOn: string, source: "web" | "mcp" = "web",
   amount?: number, // monto realmente pagado; si falta, el programado
   userId?: number, // quién lo registra (null = asistente MCP)
+  paidDate?: string, // día en que realmente se pagó (YYYY-MM-DD); debe caer dentro de `month` y no ser futuro
 ) {
   if (amount !== undefined && (!Number.isInteger(amount) || amount <= 0)) throw new Error("Monto inválido");
+  if (paidDate !== undefined) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(paidDate)) throw new Error("Fecha de pago inválida");
+    if (!paidDate.startsWith(`${month}-`)) throw new Error("El día de pago debe caer dentro del mismo mes del pago.");
+    if (paidDate > paidOn) throw new Error("El día de pago no puede ser futuro.");
+  }
   return db.transaction((tx) => {
     const item = tx.select().from(paymentSchedule).where(eq(paymentSchedule.id, scheduleId)).get();
     if (!item) throw new Error("Obligación no encontrada");
@@ -127,7 +133,7 @@ export function markPaid(
     if (existing?.paidAt) return { alreadyPaid: true as const };
 
     // El pago pertenece al mes que se está marcando: se fecha dentro de ese mes, no con la fecha de hoy
-    const date = dateWithinMonth(month, dueDate(month, item.dayOfMonth), paidOn);
+    const date = paidDate ?? dateWithinMonth(month, dueDate(month, item.dayOfMonth), paidOn);
     const paid = amount ?? item.amount;
     const pid = pocketId("Gastos del mes");
     const t = tx.insert(transactions).values({

@@ -122,17 +122,18 @@ export function createMcpServer() {
         pago_id: z.number().int().positive().describe("id del pago (de ver_pagos_proximos)"),
         mes: monthSchema.optional().describe("Mes YYYY-MM al que pertenece el pago. Por defecto, el mes actual."),
         monto: z.number().int().positive().optional().describe("Monto realmente pagado en COP. Vacío = el programado."),
+        fecha_pago: dateSchema.optional().describe("Día en que se pagó (YYYY-MM-DD), dentro del mes del pago y no futuro. Vacío = hoy."),
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
     },
-    async ({ pago_id, mes, monto }) => {
+    async ({ pago_id, mes, monto, fecha_pago }) => {
       try {
         const today = toISO(new Date());
         const month = mes ?? monthOf(today);
         if (isBeforeStart(month, today)) return fail(`${month} es anterior a la fecha de inicio: no se llevan pagos en ese mes.`);
         const item = getPayments(month, today).find((p) => p.id === pago_id);
         if (!item) return fail(`No existe el pago ${pago_id} en ${month}. Consulta los ids con ver_pagos_proximos.`);
-        const r = markPaid(pago_id, month, today, "mcp", monto); // sin userId: queda como "Asistente"
+        const r = markPaid(pago_id, month, today, "mcp", monto, undefined, fecha_pago); // sin userId: queda como "Asistente"
         const after = getPayments(month, today).find((p) => p.id === pago_id)!;
         return ok({
           pago: item.name, mes: month, yaEstabaPagado: r.alreadyPaid,
