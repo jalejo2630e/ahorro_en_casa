@@ -144,19 +144,41 @@ export function markPaid(
   });
 }
 
-/** Cambia el nombre de una obligación (para todos los meses) y de los gastos que ya generó. */
-export function renamePayment(scheduleId: number, nameRaw: string) {
-  const name = nameRaw.trim();
-  if (!name || name.length > 120) throw new Error("Escribe un nombre (hasta 120 caracteres).");
+/**
+ * Edita una obligación: nombre, monto programado y/o día de pago. Vale para TODOS los meses (los pagos ya
+ * marcados conservan el monto y la fecha reales con que se pagaron). Solo cambia lo que se pasa.
+ */
+export function updatePayment(
+  scheduleId: number,
+  changes: { name?: string; amount?: number; dayOfMonth?: number },
+) {
+  const set: { name?: string; amount?: number; dayOfMonth?: number } = {};
+  if (changes.name !== undefined) {
+    const name = changes.name.trim();
+    if (!name || name.length > 120) throw new Error("Escribe un nombre (hasta 120 caracteres).");
+    set.name = name;
+  }
+  if (changes.amount !== undefined) {
+    if (!Number.isInteger(changes.amount) || changes.amount <= 0) throw new Error("El monto debe ser mayor a cero.");
+    set.amount = changes.amount;
+  }
+  if (changes.dayOfMonth !== undefined) {
+    if (!Number.isInteger(changes.dayOfMonth) || changes.dayOfMonth < 1 || changes.dayOfMonth > 31) {
+      throw new Error("El día de pago debe estar entre 1 y 31.");
+    }
+    set.dayOfMonth = changes.dayOfMonth;
+  }
   return db.transaction((tx) => {
     const item = tx.select().from(paymentSchedule).where(eq(paymentSchedule.id, scheduleId)).get();
     if (!item) throw new Error("Obligación no encontrada");
-    const clash = tx.select().from(paymentSchedule)
-      .where(and(eq(paymentSchedule.active, true), eq(paymentSchedule.name, name))).get();
-    if (clash && clash.id !== scheduleId) throw new Error("Ya hay otro pago con ese nombre.");
-    tx.update(paymentSchedule).set({ name }).where(eq(paymentSchedule.id, scheduleId)).run();
-    tx.update(transactions).set({ concept: name }).where(eq(transactions.scheduleId, scheduleId)).run();
-    return name;
+    if (set.name !== undefined) {
+      const clash = tx.select().from(paymentSchedule)
+        .where(and(eq(paymentSchedule.active, true), eq(paymentSchedule.name, set.name))).get();
+      if (clash && clash.id !== scheduleId) throw new Error("Ya hay otro pago con ese nombre.");
+      tx.update(transactions).set({ concept: set.name }).where(eq(transactions.scheduleId, scheduleId)).run();
+    }
+    if (Object.keys(set).length > 0) tx.update(paymentSchedule).set(set).where(eq(paymentSchedule.id, scheduleId)).run();
+    return { ...item, ...set };
   });
 }
 

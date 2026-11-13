@@ -258,15 +258,28 @@ assert.equal(f.getPayments("2026-03", today).length, 0);
 f.setStartMonth("2026-01");
 const rp = f.getPayments("2026-03", today)[0];
 const other = f.getPayments("2026-03", today)[1];
-assert.throws(() => f.renamePayment(rp.id, "   ")); // vacío
-assert.throws(() => f.renamePayment(rp.id, other.name)); // ya existe otro con ese nombre
-assert.throws(() => f.renamePayment(999999, "X")); // no existe
+assert.throws(() => f.updatePayment(rp.id, { name: "   " })); // vacío
+assert.throws(() => f.updatePayment(rp.id, { name: other.name })); // ya existe otro con ese nombre
+assert.throws(() => f.updatePayment(999999, { name: "X" })); // no existe
 f.markPaid(rp.id, "2026-03", today, "web");
-f.renamePayment(rp.id, "  Nombre corregido  ");
+f.updatePayment(rp.id, { name: "  Nombre corregido  " });
 assert.equal(f.getPayments("2026-03", today).find((p) => p.id === rp.id)?.name, "Nombre corregido");
 assert.equal(f.getPayments("2026-04", today).find((p) => p.id === rp.id)?.name, "Nombre corregido"); // todos los meses
 assert.equal(f.getPayments("2026-03", today).find((p) => p.id === rp.id)?.status, "pagado"); // el pago sigue marcado
-f.renamePayment(rp.id, "Nombre corregido"); // mismo nombre sobre sí mismo no es conflicto
+f.updatePayment(rp.id, { name: "Nombre corregido" }); // mismo nombre sobre sí mismo no es conflicto
+// Editar monto y día programados (vale para todos los meses; lo ya pagado conserva su monto real)
+assert.throws(() => f.updatePayment(rp.id, { amount: 0 }));
+assert.throws(() => f.updatePayment(rp.id, { amount: 1.5 }));
+assert.throws(() => f.updatePayment(rp.id, { dayOfMonth: 0 }));
+assert.throws(() => f.updatePayment(rp.id, { dayOfMonth: 32 }));
+const paidReal = f.getPayments("2026-03", today).find((p) => p.id === rp.id)!.effectiveAmount;
+f.updatePayment(rp.id, { amount: 777_000, dayOfMonth: 31 });
+const apr = f.getPayments("2026-04", today).find((p) => p.id === rp.id)!;
+assert.equal(apr.amount, 777_000); // mes sin pagar: toma el nuevo monto
+assert.equal(apr.due, "2026-04-30"); // día 31 en un mes de 30 días -> último día
+assert.equal(f.getPayments("2026-03", today).find((p) => p.id === rp.id)!.effectiveAmount, paidReal); // lo pagado no cambia
+assert.equal(f.getPayments("2026-03", today).find((p) => p.id === rp.id)!.name, "Nombre corregido"); // solo cambió lo indicado
+f.updatePayment(rp.id, { amount: rp.amount, dayOfMonth: rp.dayOfMonth }); // se puede devolver
 f.unmarkPaid(rp.id, "2026-03");
 f.setStartMonth("2026-11");
 // ---- Ahorro: registrar lo que realmente guardaste (monto + fecha)

@@ -5,7 +5,7 @@ import { z } from "zod";
 import {
   addExpense, addExtraIncome, addIncome, addIncomePlan, addSavingsDeposit, deactivateIncomePlan, deleteExpense,
   deleteSavingsDeposit, getSavingsGoal, markIncomeReceived,
-  markPaid, monthOf, renamePayment, toISO, deleteIncomeEntry, setStartMonth, unmarkIncomeReceived, unmarkPaid,
+  markPaid, monthOf, toISO, updatePayment, deleteIncomeEntry, setStartMonth, unmarkIncomeReceived, unmarkPaid,
 } from "@/lib/finance";
 import { cop } from "@/lib/format";
 import { FREQUENCY_LABEL, incomeOccurrences, type Frequency } from "@/lib/income";
@@ -40,19 +40,27 @@ export async function markPaidAction(formData: FormData): Promise<void> {
   refresh();
 }
 
-export async function renamePaymentAction(_prev: FormState, formData: FormData): Promise<FormState> {
+/** Edita una obligación: nombre, monto programado y día de pago (vale para todos los meses). */
+export async function updatePaymentAction(_prev: FormState, formData: FormData): Promise<FormState> {
   await requireUser();
   const parsed = z
-    .object({ scheduleId: z.coerce.number().int().positive(), name: z.string().trim().min(1, "Escribe un nombre").max(120) })
+    .object({
+      scheduleId: z.coerce.number().int().positive(),
+      name: z.string().trim().min(1, "Escribe un nombre").max(120),
+      amount: amountSchema,
+      day: z.coerce.number().int().min(1, "El día va de 1 a 31").max(31, "El día va de 1 a 31"),
+    })
     .safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { ok: false, message: parsed.error.issues[0].message };
   try {
-    renamePayment(parsed.data.scheduleId, parsed.data.name);
+    updatePayment(parsed.data.scheduleId, {
+      name: parsed.data.name, amount: parsed.data.amount, dayOfMonth: parsed.data.day,
+    });
   } catch (e) {
-    return { ok: false, message: e instanceof Error ? e.message : "No se pudo renombrar" };
+    return { ok: false, message: e instanceof Error ? e.message : "No se pudo guardar" };
   }
   refresh();
-  return { ok: true, message: "Nombre actualizado" };
+  return { ok: true, message: "Pago actualizado" };
 }
 
 /** Registra un ahorro guardado: monto (o "la meta que falta") y la fecha en que se guardó. */
