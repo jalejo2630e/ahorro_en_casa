@@ -319,6 +319,26 @@ assert.equal(f.getSavingsGoal("2026-03").yearSaved, g3.yearSaved);
 // Lo ahorrado deja de estar libre para gastar (la meta, no)
 assert.equal(f.getBudget("2026-03", today).budget, pocketBefore - 650_000);
 assert.equal(f.getBudget("2026-03", today).savedDeposits, 650_000);
+// El margen del Inicio y lo libre de Gastos son la MISMA cuenta, y el ahorro guardado sale de ambos
+assert.equal(f.getSummary("2026-03", today).margin, f.getBudget("2026-03", today).remaining);
+assert.equal(f.getSummary("2026-03", today).deposited, 650_000);
+{
+  // Un pago ya hecho de una obligación desactivada sigue contando (el dinero salió) y la cuenta sigue cuadrando
+  const { db: tdb } = await import("@/db");
+  const { paymentSchedule: ps } = await import("@/db/schema");
+  const { eq: eqq } = await import("drizzle-orm");
+  const hp = f.getPayments("2026-05", today)[2];
+  f.markPaid(hp.id, "2026-05", today, "web");
+  const before5 = f.getSummary("2026-05", today);
+  tdb.update(ps).set({ active: false }).where(eqq(ps.id, hp.id)).run();
+  const after5 = f.getSummary("2026-05", today);
+  assert.equal(after5.hiddenPaid, hp.amount);
+  assert.equal(after5.obligationsTotal, before5.obligationsTotal);
+  assert.equal(after5.margin, before5.margin);
+  assert.equal(f.getBudget("2026-05", today).remaining, after5.margin);
+  tdb.update(ps).set({ active: true }).where(eqq(ps.id, hp.id)).run();
+  f.unmarkPaid(hp.id, "2026-05");
+}
 // Cumplir la meta -> oro; quitar un ahorro lo devuelve
 f.addSavingsDeposit({ amount: g3.remaining, date: "2026-03-28" }, today);
 assert.equal(f.getSavingsGoal("2026-03").medal, "oro");

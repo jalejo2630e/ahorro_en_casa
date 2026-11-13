@@ -582,18 +582,25 @@ export function getSummary(month: string, today: string) {
       .get()?.t ?? 0;
   const payments = getPayments(month, today);
   const pendingObligations = payments.filter((p) => p.status !== "pagado").reduce((a, p) => a + p.amount, 0);
-  const obligationsTotal = payments.reduce((a, p) => a + p.effectiveAmount, 0); // pagado real + pendiente programado
+  // Pagos de obligaciones hechos este mes que ya no están en la lista (p. ej. de una obligación desactivada):
+  // el dinero igual salió, así que cuenta como pagado.
+  const listedPaid = payments.filter((p) => p.status === "pagado").reduce((a, p) => a + p.effectiveAmount, 0);
+  const hiddenPaid = Math.max(0, expenses - dailyExpenses - listedPaid);
+  const obligationsTotal = payments.reduce((a, p) => a + p.effectiveAmount, 0) + hiddenPaid; // pagado real + pendiente programado
+  const deposited = depositedIn(month); // lo que ya guardaste como ahorro deja de estar libre
 
   // Si hay ingresos programados se usa lo esperado; si lo recibido es mayor, manda lo recibido.
   const expected = expectedIncome(month, today);
   const incomeBase = Math.max(income, expected);
-  const margin = incomeBase + extraReceived - expenses - pendingObligations; // lo realmente libre
+  // Lo realmente libre: sin lo ya gastado, sin lo que falta pagar y sin lo que ya guardaste como ahorro
+  const margin = incomeBase + extraReceived - expenses - pendingObligations - deposited;
 
   return {
     month, income, extraReceived, expectedIncome: expected, incomeBase,
     expenses, dailyExpenses, paidObligations: expenses - dailyExpenses,
-    obligationsTotal, pendingObligations,
-    savingsRate: incomeBase > 0 ? margin / incomeBase : 0,
+    obligationsTotal, pendingObligations, hiddenPaid, deposited,
+    // Parte del ingreso que no se gastó (libre + ahorrado)
+    savingsRate: incomeBase > 0 ? (margin + deposited) / incomeBase : 0,
     margin,
   };
 }
