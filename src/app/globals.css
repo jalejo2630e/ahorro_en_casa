@@ -18,6 +18,20 @@
   }
 }
 
+html {
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* En el celular los campos van a 16px: así iOS no hace zoom al tocarlos */
+@media (max-width: 767px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
 body {
   background: var(--background);
   color: var(--foreground);

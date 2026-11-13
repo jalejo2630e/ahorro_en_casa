@@ -149,7 +149,7 @@ async function Savings({ searchParams }: { searchParams: PageProps<"/ahorro">["s
       <section className={card} aria-label="Mes a mes">
         <h2 className="mb-2 font-semibold">Mes a mes · {year}</h2>
         <ul className="divide-y divide-slate-100 dark:divide-slate-800">
-          {history.map((h) => {
+          {history.filter((h) => !h.before).map((h) => {
             const ratio = h.monthlyTarget ? Math.min(h.saved / h.monthlyTarget, 1) : 0;
             return (
               <li key={h.month} className="py-2.5">

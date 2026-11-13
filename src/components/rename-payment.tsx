@@ -24,7 +24,7 @@ export function PaymentName({ id, name, amount, day }: { id: number; name: strin
   if (!editing) {
     return (
       <p className="flex items-center gap-1.5 font-medium">
-        <span className="truncate">{name}</span>
+        <span className="min-w-0 break-words">{name}</span>
         <button
           type="button"
           onClick={() => setEditing(true)}

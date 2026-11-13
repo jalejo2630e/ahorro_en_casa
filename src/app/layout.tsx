@@ -17,14 +17,17 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: "#059669",
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover", // usa toda la pantalla; el menú respeta la barra inferior del teléfono
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="es" className={`${geistSans.variable} h-full antialiased`}>
-      <body className="flex min-h-full flex-col md:flex-row">
+      <body className="flex min-h-full flex-col overflow-x-clip md:flex-row">
         <Nav />
-        <main className="mx-auto w-full max-w-4xl flex-1 px-4 pb-28 pt-6 md:px-8 md:pb-10">
+        <main className="mx-auto w-full min-w-0 max-w-4xl flex-1 px-4 pb-[calc(7rem+env(safe-area-inset-bottom))] pt-6 md:px-8 md:pb-10">
           {children}
         </main>
       </body>

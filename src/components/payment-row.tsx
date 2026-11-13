@@ -14,37 +14,49 @@ function when(p: Payment) {
   return `Vence en ${p.daysLeft} d`;
 }
 
+const smallInput =
+  "rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs dark:border-slate-700 dark:bg-slate-900";
+
+/**
+ * Fila de pago pensada para celular: arriba el día, el nombre y el monto; abajo (en su propia línea)
+ * el estado y las acciones, que pasan a otra línea si no caben.
+ */
 export function PaymentRow({ p, month, today }: { p: Payment; month: string; today: string }) {
   // Día en que se pagó: dentro del mes del pago y nunca en el futuro (un mes futuro no tiene días ya pasados)
   const cur = monthOf(today);
   const dateMax = month > cur ? null : month === cur ? today : `${month}-${String(daysInMonth(month)).padStart(2, "0")}`;
   return (
-    <li className="flex items-center gap-3 py-3">
-      <div className="w-12 shrink-0 text-center">
-        <p className="text-xl font-bold leading-none">{Number(p.due.slice(8))}</p>
-        <p className="text-[10px] uppercase text-slate-500">día</p>
+    <li className="py-3">
+      <div className="flex items-start gap-3">
+        <div className="w-10 shrink-0 text-center">
+          <p className="text-xl font-bold leading-none">{Number(p.due.slice(8))}</p>
+          <p className="text-[10px] uppercase text-slate-500">día</p>
+        </div>
+        <div className="min-w-0 flex-1">
+          <PaymentName id={p.id} name={p.name} amount={p.amount} day={p.dayOfMonth} />
+          <p className="text-xs text-slate-500">
+            {p.category ?? "Sin categoría"} · {when(p)}
+            {p.priority === "critica" && <span className="font-semibold text-red-600"> · crítica</span>}
+          </p>
+          {p.fundingSource && <p className="text-xs text-slate-400">Se paga con: {p.fundingSource}</p>}
+        </div>
+        <div className="shrink-0 text-right">
+          <p className="font-semibold tabular-nums">{cop(p.effectiveAmount)}</p>
+          {p.status === "pagado" && p.effectiveAmount !== p.amount && (
+            <p className="text-[11px] text-slate-500">programado {cop(p.amount)}</p>
+          )}
+        </div>
       </div>
-      <div className="min-w-0 flex-1">
-        <PaymentName id={p.id} name={p.name} amount={p.amount} day={p.dayOfMonth} />
-        <p className="text-xs text-slate-500">
-          {p.category ?? "Sin categoría"} · {when(p)}
-          {p.priority === "critica" && <span className="font-semibold text-red-600"> · crítica</span>}
-        </p>
-        {p.fundingSource && <p className="truncate text-xs text-slate-400">Se paga con: {p.fundingSource}</p>}
-      </div>
-      <div className="flex flex-col items-end gap-1.5">
-        <p className="font-semibold tabular-nums">{cop(p.effectiveAmount)}</p>
-        {p.status === "pagado" && p.effectiveAmount !== p.amount && (
-          <p className="-mt-1 text-[11px] text-slate-500">programado {cop(p.amount)}</p>
-        )}
+
+      <div className="mt-2 pl-[3.25rem]">
         {p.status === "pagado" ? (
-          <form action={unmarkPaidAction} className="flex items-center gap-2">
+          <form action={unmarkPaidAction} className="flex items-center justify-end gap-3">
             <StatusBadge status="pagado" />
             <input type="hidden" name="scheduleId" value={p.id} />
             <input type="hidden" name="month" value={month} />
             <button
               type="submit"
-              className="text-xs text-slate-500 underline hover:text-red-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-600"
+              className="px-1 py-1.5 text-xs text-slate-500 underline hover:text-red-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-600"
             >
               Deshacer
             </button>
@@ -59,19 +71,19 @@ export function PaymentRow({ p, month, today }: { p: Payment; month: string; tod
               inputMode="numeric"
               placeholder={p.amount.toLocaleString("es-CO")}
               aria-label={`Monto pagado de ${p.name} (vacío = ${cop(p.amount)})`}
-              className="w-24 rounded-md border border-slate-300 bg-white px-2 py-1 text-right text-xs tabular-nums dark:border-slate-700 dark:bg-slate-900"
+              className={`${smallInput} w-24 text-right tabular-nums`}
             />
             {dateMax && (
               <input
                 name="paidDate" type="date" min={`${month}-01`} max={dateMax}
                 aria-label={`Día en que pagaste ${p.name} (vacío = ${month === cur ? "hoy" : "el día programado"})`}
                 title="Día en que lo pagaste (vacío = hoy)"
-                className="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900"
+                className={`${smallInput} w-36`}
               />
             )}
             <button
               type="submit"
-              className="rounded-md bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-emerald-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600"
+              className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600"
             >
               Marcar pagado
             </button>

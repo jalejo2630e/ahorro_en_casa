@@ -63,7 +63,7 @@ async function Income({ searchParams }: { searchParams: PageProps<"/ingresos">["
 
       <MonthTabs path="/ingresos" month={month} todayMonth={monthOf(today)} />
 
-      <section aria-label="Resumen de ingresos" className="grid grid-cols-3 gap-3">
+      <section aria-label="Resumen de ingresos" className="grid grid-cols-3 gap-2 sm:gap-3">
         <Stat label="Esperado" value={cop(s.expectedIncome)} />
         <Stat label="Recibido" value={cop(s.income)} />
         <Stat label="Falta por recibir" value={cop(pendingTotal)} />
@@ -87,8 +87,9 @@ async function Income({ searchParams }: { searchParams: PageProps<"/ingresos">["
                 {rows.map((r) => {
                   const b = BADGE[r.status];
                   return (
-                    <li key={`${r.scheduleId}-${r.key}`} className="flex items-center gap-3 py-3">
-                      <div className="w-12 shrink-0 text-center">
+                    <li key={`${r.scheduleId}-${r.key}`} className="py-3">
+                     <div className="flex items-start gap-3">
+                      <div className="w-10 shrink-0 text-center">
                         {r.date ? (
                           <>
                             <p className="text-xl font-bold leading-none">{Number(r.date.slice(8))}</p>
@@ -99,25 +100,26 @@ async function Income({ searchParams }: { searchParams: PageProps<"/ingresos">["
                         )}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="truncate font-medium">{r.name}</p>
+                        <p className="break-words font-medium">{r.name}</p>
                         {r.savePercent > 0 && <p className="text-xs text-slate-500">Aparta {r.savePercent}% al ahorro</p>}
                       </div>
-                      <div className="flex flex-col items-end gap-1.5">
-                        <p className="font-semibold tabular-nums">{cop(r.amount)}</p>
+                        <p className="shrink-0 font-semibold tabular-nums">{cop(r.amount)}</p>
+                     </div>
+                      <div className="mt-2 pl-[3.25rem]">
                         {r.status === "recibido" ? (
-                          <form action={unmarkIncomeReceivedAction} className="flex items-center gap-2">
+                          <form action={unmarkIncomeReceivedAction} className="flex items-center justify-end gap-3">
                             <StatusBadge status={b.status} label={b.label} />
                             <input type="hidden" name="scheduleId" value={r.scheduleId} />
                             <input type="hidden" name="key" value={r.key} />
                             <button
                               type="submit"
-                              className="text-xs text-slate-500 underline hover:text-red-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-600"
+                              className="px-1 py-1.5 text-xs text-slate-500 underline hover:text-red-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-600"
                             >
                               Deshacer
                             </button>
                           </form>
                         ) : (
-                          <form action={markIncomeReceivedAction} className="flex items-center gap-2">
+                          <form action={markIncomeReceivedAction} className="flex flex-wrap items-center justify-end gap-2">
                             <StatusBadge status={b.status} label={b.label} />
                             <input type="hidden" name="scheduleId" value={r.scheduleId} />
                             <input type="hidden" name="key" value={r.key} />
@@ -126,11 +128,11 @@ async function Income({ searchParams }: { searchParams: PageProps<"/ingresos">["
                               inputMode="numeric"
                               placeholder={r.amount.toLocaleString("es-CO")}
                               aria-label={`Monto recibido de ${r.name} (vacío = ${cop(r.amount)})`}
-                              className="w-24 rounded-md border border-slate-300 bg-white px-2 py-1 text-right text-xs tabular-nums dark:border-slate-700 dark:bg-slate-900"
+                              className="w-24 rounded-md border border-slate-300 bg-white px-2 py-1.5 text-right text-xs tabular-nums dark:border-slate-700 dark:bg-slate-900"
                             />
                             <button
                               type="submit"
-                              className="rounded-md bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-emerald-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600"
+                              className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600"
                             >
                               Marcar recibido
                             </button>
@@ -236,9 +238,9 @@ async function Income({ searchParams }: { searchParams: PageProps<"/ingresos">["
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className={card}>
+    <div className="min-w-0 rounded-2xl border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900 sm:p-4">
       <p className="text-xs font-medium text-slate-500">{label}</p>
-      <p className="mt-1 text-base font-bold tabular-nums md:text-lg">{value}</p>
+      <p className="mt-1 text-sm font-bold tabular-nums sm:text-base md:text-lg">{value}</p>
     </div>
   );
 }
