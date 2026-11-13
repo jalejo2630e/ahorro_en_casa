@@ -2,7 +2,9 @@ import { connection } from "next/server";
 import { Suspense } from "react";
 import { logoutAction } from "@/app/auth-actions";
 import { ChangePinForm, CreateUserForm, ResetPinForm, SetEmailForm, ToggleActiveForm } from "@/components/auth-forms";
+import { PushSettings } from "@/components/push-settings";
 import { requireUser } from "@/lib/auth";
+import { vapidPublicKey } from "@/lib/push";
 import { listUsers } from "@/lib/users";
 
 export const metadata = { title: "Cuenta · Ahorro en casa" };
@@ -40,6 +42,15 @@ async function Account() {
           </button>
         </form>
       </header>
+
+      <section className={card} aria-label="Avisos de pagos">
+        <h2 className="mb-1 font-semibold">Avisos de pagos en el celular</h2>
+        <p className="mb-3 text-xs text-slate-500">
+          Cada día a partir de las 8 a. m. te avisa de los pagos que vencen hoy, mañana o ya vencieron. Funciona con la app cerrada;
+          actívalo en cada celular donde lo quieras.
+        </p>
+        <PushSettings publicKey={vapidPublicKey()} />
+      </section>
 
       <section className={card} aria-label="Cambiar PIN">
         <h2 className="mb-3 font-semibold">Cambiar mi PIN</h2>

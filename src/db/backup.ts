@@ -5,8 +5,9 @@ import fs from "node:fs";
 import path from "node:path";
 import Database from "better-sqlite3";
 import { backupDir } from "../lib/backup-dir";
+import { dbPath } from "../lib/db-path";
 
-const src = process.env.DATABASE_PATH ?? "data/ahorro.db";
+const src = dbPath();
 
 async function main() {
   if (!fs.existsSync(src)) {

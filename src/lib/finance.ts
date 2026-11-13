@@ -881,3 +881,64 @@ export function getYearOverview(year: number, today: string) {
 export function listCategories() {
   return db.select().from(categories).all();
 }
+
+// ---------- Categorías propias ----------
+const COLOR_RE = /^#[0-9a-f]{6}$/i;
+
+function cleanCategoryName(raw: string): string {
+  const name = raw.trim().replace(/\s+/g, " ");
+  if (!name) throw new Error("Escribe un nombre para la categoría");
+  if (name.length > 40) throw new Error("El nombre es muy largo (máximo 40 letras)");
+  return name;
+}
+function assertFreeName(name: string, exceptId?: number) {
+  const clash = db.select().from(categories).all()
+    .find((c) => c.id !== exceptId && c.name.toLocaleLowerCase("es") === name.toLocaleLowerCase("es"));
+  if (clash) throw new Error(`Ya existe una categoría llamada "${clash.name}"`);
+}
+
+/** Categorías con cuántos gastos y cuántos pagos programados las usan. */
+export function listCategoriesWithUsage() {
+  const spent = new Map(
+    db.select({ id: transactions.categoryId, n: sql<number>`count(*)` }).from(transactions)
+      .where(sql`${transactions.categoryId} is not null`).groupBy(transactions.categoryId).all()
+      .map((r) => [r.id, r.n]),
+  );
+  const planned = new Map(
+    db.select({ id: paymentSchedule.categoryId, n: sql<number>`count(*)` }).from(paymentSchedule)
+      .where(sql`${paymentSchedule.categoryId} is not null`).groupBy(paymentSchedule.categoryId).all()
+      .map((r) => [r.id, r.n]),
+  );
+  return db.select().from(categories).all()
+    .map((c) => ({ ...c, expenses: spent.get(c.id) ?? 0, payments: planned.get(c.id) ?? 0 }))
+    .sort((a, b) => a.name.localeCompare(b.name, "es"));
+}
+
+export function addCategory(nameRaw: string, color: string) {
+  const name = cleanCategoryName(nameRaw);
+  if (!COLOR_RE.test(color)) throw new Error("Color inválido");
+  assertFreeName(name);
+  return db.insert(categories).values({ name, color, kind: "otros" }).returning().get();
+}
+
+export function updateCategory(id: number, input: { name?: string; color?: string }) {
+  const cur = db.select().from(categories).where(eq(categories.id, id)).get();
+  if (!cur) throw new Error("No encuentro esa categoría");
+  const name = input.name !== undefined ? cleanCategoryName(input.name) : cur.name;
+  const color = input.color ?? cur.color;
+  if (!COLOR_RE.test(color)) throw new Error("Color inválido");
+  assertFreeName(name, id);
+  db.update(categories).set({ name, color }).where(eq(categories.id, id)).run();
+}
+
+/** Borra la categoría; sus gastos y pagos quedan "Sin categoría". Devuelve cuántos quedaron sueltos. */
+export function deleteCategory(id: number) {
+  return db.transaction((tx) => {
+    const cur = tx.select().from(categories).where(eq(categories.id, id)).get();
+    if (!cur) throw new Error("No encuentro esa categoría");
+    const a = tx.update(transactions).set({ categoryId: null }).where(eq(transactions.categoryId, id)).run().changes;
+    const b = tx.update(paymentSchedule).set({ categoryId: null }).where(eq(paymentSchedule.categoryId, id)).run().changes;
+    tx.delete(categories).where(eq(categories.id, id)).run();
+    return { expenses: a, payments: b };
+  });
+}

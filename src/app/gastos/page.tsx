@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { connection } from "next/server";
 import { Suspense } from "react";
 import { deleteExpenseAction } from "@/app/actions";
@@ -144,6 +145,9 @@ async function Expenses({ searchParams }: { searchParams: PageProps<"/gastos">["
           <section className={card} aria-label="Registrar gasto">
             <h2 className="mb-3 font-semibold">Registrar gasto</h2>
             <ExpenseForm categories={categories} />
+            <p className="mt-3 text-xs text-slate-500">
+              ¿Falta una categoría? <Link href="/categorias" className="underline">Crea o edita las tuyas</Link>.
+            </p>
           </section>
           <section className={card} aria-label="Registrar dinero extra">
             <h2 className="mb-1 font-semibold">Recibí dinero</h2>

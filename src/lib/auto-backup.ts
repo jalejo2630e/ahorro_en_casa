@@ -5,6 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 import Database from "better-sqlite3";
 import { backupDir } from "./backup-dir";
+import { dbPath } from "./db-path";
 
 const KEEP = 30; // respaldos que se conservan
 const MAX_AGE_MS = 20 * 60 * 60 * 1000; // se hace uno nuevo si el último tiene más de 20 h
@@ -13,7 +14,7 @@ const CHECK_EVERY_MS = 3 * 60 * 60 * 1000; // revisa cada 3 h
 const g = globalThis as unknown as { autoBackupStarted?: boolean };
 
 export async function backupIfNeeded(): Promise<string | null> {
-  const src = process.env.DATABASE_PATH ?? "data/ahorro.db";
+  const src = dbPath();
   if (!fs.existsSync(src)) return null;
   const base = path.basename(src, ".db");
   const dir = backupDir();

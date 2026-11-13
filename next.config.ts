@@ -17,6 +17,18 @@ const nextConfig: NextConfig = {
   cacheComponents: true,
   ...(pub ? { allowedDevOrigins: [pub.hostname] } : {}),
   ...(pub ? { experimental: { serverActions: { allowedOrigins: [pub.host] } } } : {}),
+  async headers() {
+    // El service worker nunca se guarda en caché, para que las correcciones lleguen siempre.
+    return [
+      {
+        source: "/sw.js",
+        headers: [
+          { key: "Cache-Control", value: "no-cache, no-store, must-revalidate" },
+          { key: "Content-Type", value: "application/javascript; charset=utf-8" },
+        ],
+      },
+    ];
+  },
   async redirects() {
     return [
       { source: "/calendario", destination: "/pagos", permanent: false },

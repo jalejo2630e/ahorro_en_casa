@@ -6,7 +6,7 @@ import { NextResponse, type NextRequest } from "next/server";
 const SESSION_COOKIE = "ahorro_session";
 
 // Públicas: pantallas de acceso y lo que el navegador pide SIN cookie (manifest e íconos de la PWA).
-const PUBLIC_PATHS = new Set(["/login", "/setup", "/manifest.webmanifest"]);
+const PUBLIC_PATHS = new Set(["/login", "/setup", "/manifest.webmanifest", "/sw.js"]);
 
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;

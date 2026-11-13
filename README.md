@@ -118,3 +118,24 @@ en sí no se descuenta. El MCP tiene la herramienta `registrar_ahorro` (agrega, 
   (`/api/export?anio=AAAA` o `?mes=AAAA-MM`).
 - **Pagos:** en **Pagos** puedes agregar uno ("+ Agregar un pago"), editarlo (✎) y quitarlo desde el mes que ves; lo que ya
   pagaste en meses anteriores se conserva. Los ingresos programados también se editan con ✎.
+
+## Categorías propias
+
+En **Gastos → "Crea o edita las tuyas"** (`/categorias`) puedes crear categorías con nombre y color, renombrarlas y borrarlas.
+Al borrar una, sus gastos y pagos no se pierden: quedan "Sin categoría". Aparecen en el formulario de gastos, en Pagos y en la
+gráfica de gastos por categoría (el asistente MCP también las ve).
+
+## Avisos de pagos en el celular
+
+- **Activar:** en **Cuenta → "Avisos de pagos en el celular"** toca "Activar avisos en este celular" y acepta el permiso. Hay un botón
+  de aviso de prueba. En iPhone la app debe estar instalada (Safari → Compartir → "Agregar a inicio") y abrirse desde su ícono.
+- **Qué manda:** un aviso al día, a partir de las 8 a. m., con los pagos sin pagar que vencen hoy, mañana o ya vencieron. Si no hay,
+  no manda nada. Funciona con la app cerrada (el aviso lo entrega Google/Apple); al tocarlo se abre Pagos (necesita Tailscale activo).
+- **Claves:** `VAPID_PUBLIC_KEY` y `VAPID_PRIVATE_KEY` en `.env.local` (no las compartas ni las subas). Si cambias de claves,
+  cada celular debe volver a activar los avisos.
+
+## Dónde vive la base
+
+`DATABASE_PATH` en `.env.local` apunta a `AppData/Local/AhorroEnCasa/ahorro.db` (disco local), **fuera de OneDrive**, para que
+OneDrive no sincronice un archivo SQLite que está en uso. Los scripts (`db:push`, `db:backup`…) leen la misma variable.
+La copia anterior quedó en `AppData/Local/AhorroEnCasa/respaldos/base-anterior-en-OneDrive/` (puedes borrarla cuando quieras).

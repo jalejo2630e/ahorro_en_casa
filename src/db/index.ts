@@ -1,11 +1,12 @@
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
+import { dbPath } from "../lib/db-path";
 import * as schema from "./schema";
 
 const globalForDb = globalThis as unknown as { sqlite?: Database.Database };
 
 const sqlite =
-  globalForDb.sqlite ?? new Database(process.env.DATABASE_PATH ?? "data/ahorro.db");
+  globalForDb.sqlite ?? new Database(dbPath());
 sqlite.pragma("journal_mode = WAL");
 sqlite.pragma("foreign_keys = ON");
 /**
@@ -26,6 +27,10 @@ function migrate(conn: Database.Database) {
   conn.exec(
     "CREATE TABLE IF NOT EXISTS `savings_deposits` (\n\t`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,\n\t`date` text NOT NULL,\n\t`amount` integer NOT NULL,\n\t`note` text,\n\t`user_id` integer,\n\t`created_at` text DEFAULT CURRENT_TIMESTAMP NOT NULL\n);",
   );
+  conn.exec(
+    "CREATE TABLE IF NOT EXISTS `push_subscriptions` (\n\t`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,\n\t`endpoint` text NOT NULL,\n\t`p256dh` text NOT NULL,\n\t`auth` text NOT NULL,\n\t`user_id` integer,\n\t`created_at` text DEFAULT CURRENT_TIMESTAMP NOT NULL\n);",
+  );
+  conn.exec("CREATE UNIQUE INDEX IF NOT EXISTS `push_subscriptions_endpoint_unique` ON `push_subscriptions` (`endpoint`);");
   // payment_schedule.import_key: nombre original para que `db:import` no duplique pagos renombrados.
   // Se rellena con el nombre actual (solo filas que aún no la tienen).
   const payCols = conn.prepare("pragma table_info(payment_schedule)").all() as { name: string }[];

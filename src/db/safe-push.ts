@@ -8,8 +8,9 @@
 import { execSync } from "node:child_process";
 import fs from "node:fs";
 import Database from "better-sqlite3";
+import { dbPath } from "../lib/db-path";
 
-const src = process.env.DATABASE_PATH ?? "data/ahorro.db";
+const src = dbPath();
 
 function counts(): Record<string, number> {
   if (!fs.existsSync(src)) return {};

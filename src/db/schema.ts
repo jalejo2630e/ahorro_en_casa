@@ -155,3 +155,14 @@ export const sessions = sqliteTable("sessions", {
   expiresAt: integer("expires_at").notNull(), // epoch ms
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
+
+// Celulares que aceptaron recibir avisos (Web Push). Un celular = una fila (el endpoint es único).
+// OJO: src/db/index.ts crea esta tabla con CREATE TABLE IF NOT EXISTS; mantén ese SQL igual a esta definición.
+export const pushSubscriptions = sqliteTable("push_subscriptions", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  endpoint: text("endpoint").notNull(),
+  p256dh: text("p256dh").notNull(),
+  auth: text("auth").notNull(),
+  userId: integer("user_id"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (t) => [uniqueIndex("push_subscriptions_endpoint_unique").on(t.endpoint)]);

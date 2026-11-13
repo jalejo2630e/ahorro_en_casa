@@ -403,6 +403,59 @@ assert.ok(csv.includes('"di ""hola""; x"')); // comillas y separador escapados
 assert.ok(csv.includes("'+1;5"));
 f.setStartMonth("2026-11");
 
+// ---- Categorías propias
+const nc = f.addCategory("  Mascotas  ", "#9333ea");
+assert.equal(nc.name, "Mascotas"); // recorta espacios
+assert.throws(() => f.addCategory("mascotas", "#000000"), /Ya existe/); // sin importar mayúsculas
+assert.throws(() => f.addCategory("   ", "#000000"), /Escribe/);
+assert.throws(() => f.addCategory("X", "rojo"), /Color/);
+f.addExpense({ concept: "Veterinario", amount: 50_000, category: "Mascotas", date: today });
+assert.equal(f.listCategoriesWithUsage().find((c) => c.name === "Mascotas")!.expenses, 1);
+f.updateCategory(nc.id, { name: "Mi mascota", color: "#111111" });
+assert.throws(() => f.updateCategory(nc.id, { name: "Vivienda" }), /Ya existe/);
+f.updateCategory(nc.id, { name: "Mi mascota" }); // su propio nombre no choca consigo misma
+const del = f.deleteCategory(nc.id);
+assert.equal(del.expenses, 1);
+assert.ok(!f.listCategories().some((c) => c.name === "Mi mascota"));
+assert.equal(f.exportMovements("2026-11").find((r) => r.concept === "Veterinario")!.category, ""); // el gasto sigue, sin categoría
+assert.throws(() => f.deleteCategory(nc.id), /No encuentro/);
+
+// ---- Avisos de pagos
+const push = await import("./push");
+assert.equal(push.composeReminder([]), null);
+assert.equal(push.composeReminder([{ name: "Luz", amount: 1000, daysLeft: 5 }]), null); // lejos: no se avisa
+const m = push.composeReminder([
+  { name: "Agua", amount: 60_000, daysLeft: 1 }, { name: "Arriendo", amount: 1_200_000, daysLeft: -2 },
+  { name: "Luz", amount: 100_000, daysLeft: 0 },
+])!;
+assert.match(m.title, /3 pago\(s\) por atender, 1 vencido/);
+assert.ok(m.body.indexOf("Arriendo") < m.body.indexOf("Luz") && m.body.indexOf("Luz") < m.body.indexOf("Agua")); // lo más urgente primero
+assert.ok(m.body.includes("vencido hace 2 días") && m.body.includes("(hoy)") && m.body.includes("(mañana)"));
+const many = push.composeReminder(Array.from({ length: 6 }, (_, i) => ({ name: `P${i}`, amount: 1, daysLeft: 0 })))!;
+assert.ok(many.body.endsWith("y 2 más"));
+
+const sent: string[] = [];
+const sender: import("./push").Sender = async (sub) => {
+  if (sub.endpoint.endsWith("/dead")) throw Object.assign(new Error("gone"), { statusCode: 410 });
+  sent.push(sub.endpoint);
+};
+const subKeys = { p256dh: "p".repeat(20), auth: "a".repeat(20) };
+push.saveSubscription({ endpoint: "https://fcm.googleapis.com/send/alive", keys: subKeys }, 1);
+push.saveSubscription({ endpoint: "https://fcm.googleapis.com/send/alive", keys: subKeys }, 1); // mismo celular: no se duplica
+push.saveSubscription({ endpoint: "https://fcm.googleapis.com/send/dead", keys: subKeys }, 1);
+assert.equal(push.listSubscriptions().length, 2);
+const rs = await push.sendToAll(m, sender);
+assert.deepEqual([rs.sent, rs.removed], [1, 1]); // el celular que ya no existe se borra solo
+assert.equal(push.listSubscriptions().length, 1);
+sent.length = 0;
+assert.equal(await push.runDailyReminder(new Date(2026, 10, 12, 7, 0), sender), null); // antes de las 8 no manda
+const first = await push.runDailyReminder(new Date(2026, 10, 12, 9, 0), sender);
+assert.ok(first && (first.sent === 1 || "skipped" in first));
+assert.equal(await push.runDailyReminder(new Date(2026, 10, 12, 18, 0), sender), null); // una sola vez al día
+assert.ok(await push.runDailyReminder(new Date(2026, 10, 13, 9, 0), sender)); // al día siguiente vuelve a tocar
+push.removeSubscription("https://fcm.googleapis.com/send/alive");
+assert.equal(await push.runDailyReminder(new Date(2026, 10, 14, 9, 0), sender), null); // sin celulares no hace nada
+
 console.log("finance OK", s);
 }
 main();
